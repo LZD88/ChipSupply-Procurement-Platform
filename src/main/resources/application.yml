@@ -1,0 +1,97 @@
+server:
+  port: ${SERVER_PORT:8082}
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: ChipSupplyTeachingSystem
+  autoconfigure:
+    exclude: com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${CHIP_DB_URL:jdbc:mysql://localhost:3306/chip_supply_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${CHIP_DB_USER:root}
+    password: ${CHIP_DB_PASSWORD:123456}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-test-query: SELECT 1
+
+  # JPA配置（用于自动创建表，可选）
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 100MB
+
+  # 国际化配置
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+
+
+
+# 日志配置
+logging:
+  level:
+    com.chipsupply: info
+    # 输出执行 SQL、绑定参数和返回行数；设为 info 可关闭 SQL 调试日志。
+    com.chipsupply.mapper: ${CHIP_SQL_LOG_LEVEL:debug}
+    com.baomidou.mybatisplus: warn
+    org.springframework.web: info
+    org.springframework.security: warn
+  file:
+    name: logs/chipsupply.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 30
+
+# 自定义配置
+chipsupply:
+  # 数据初始化配置
+  init:
+    enabled: true
+    insert-sample-data: ${CHIP_DEMO_DATA:true}
+  # 文件上传路径
+  upload:
+    path: ./uploads/
+    max-size: 10MB
+  # 系统配置
+  system:
+    name: 芯链 · 芯片采购实验室
+    version: 2.0.0
+    agent-url: ${CHIP_AGENT_URL:http://localhost:3000}
+    copyright: © 2024-2026 芯链 · 芯片采购实验室
+
+# MyBatis Plus 配置
+mybatis-plus:
+  # 禁用自动DDL功能
+  global-config:
+    db-config:
+      ddl-auto: none
+  # 禁用MyBatis Plus的DDL自动执行
+  configuration:
+    map-underscore-to-camel-case: true
+    use-generated-keys: true
+    use-column-label: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
