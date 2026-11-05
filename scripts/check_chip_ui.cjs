@@ -17,7 +17,7 @@ const out=path.join(__dirname,'../docs/screenshots');fs.mkdirSync(out,{recursive
  await page.getByText('业务服务已连接').waitFor();
  await page.screenshot({path:path.join(out,'chip-workspace-desktop.png'),fullPage:true});
  await page.locator('[data-nav=catalog]').click();
- await page.locator('#search').fill('EDU-MCU-32A');
+ await page.locator('#search').fill('CS-MCU-32A');
  await page.waitForTimeout(750);
  assert.equal(await page.locator('tbody tr').count(),2);
  await page.locator('[data-part]').first().click();

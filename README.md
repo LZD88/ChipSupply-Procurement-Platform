@@ -1,6 +1,6 @@
-# ChipSupply Teaching Platform
+# ChipSupply Procurement Platform
 
-> 一套可运行、可观测、可扩展的芯片供应链教学业务平台，为采购智能体提供真实的物料、供应商、库存与订单操作环境。
+> 面向芯片供应链的企业级采购协同平台，覆盖物料、供应商、库存预警、采购订单与履约跟踪全流程。
 
 ![Java](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.1-6DB33F?logo=springboot&logoColor=white)
@@ -9,18 +9,18 @@
 
 ## 项目定位
 
-本项目把芯片采购业务抽象为一套完整的教学型 ERP 后端，并配套原生 Web 工作台。它既可以独立演示采购流程，也可以作为 `ChipChain-Procurement-Agent` 的业务数据底座，通过稳定的 REST API 支撑多智能体查询、分析和订单执行。
+本项目将芯片采购业务抽象为一套完整的供应链业务平台，并配套原生 Web 运营工作台。平台既可独立承载采购协同流程，也可作为 `ChipChain-Procurement-Agent` 的业务数据底座，通过稳定的 REST API 支撑多智能体查询、分析和订单执行。
 
-所有供应商、制造商、EDU 料号、报价和订单均为虚构样本，仅用于技术演示与课堂实验。
+仓库内置一套脱敏的场景化业务数据，用于本地初始化、接口联调和流程验证，不对应真实企业或交易。
 
 ## 核心能力
 
 - **芯片物料中心**：覆盖 MCU、存储、电源管理、模拟、接口与传感器六类芯片，支持 MPN、封装、温度等级、MOQ 与交期管理。
-- **供应网络管理**：维护供应商档案、信用等级和供货关系，支持多供应商比价场景。
-- **库存与预警**：提供入库、出库、安全库存校验和库存预警接口。
+- **供应网络管理**：维护供应商档案、信用等级和供货关系，支持多供应商比价与供应风险识别。
+- **库存与预警**：提供入库、出库、安全库存校验和库存预警接口，联动物料补货决策。
 - **采购订单闭环**：支持订单创建、明细查询、状态流转、金额重算和业务规则校验。
-- **可复现教学数据**：首次启动自动建库建表，并写入一套版本化的芯片供应链样本。
-- **可观测 API**：记录请求方法、路径、HTTP 状态和耗时；教学环境可输出 SQL 与绑定参数。
+- **版本化业务数据**：首次启动自动建库建表并写入可追踪的数据版本，保证环境一致性和可重复部署。
+- **可观测 API**：记录请求方法、路径、HTTP 状态和耗时，并支持按环境控制 SQL 与参数日志。
 
 ## 架构
 
@@ -64,15 +64,15 @@ flowchart LR
 | `SERVER_PORT` | `8082` | HTTP 服务端口 |
 | `CHIP_DB_URL` | `jdbc:mysql://localhost:3306/chip_supply_db?...` | JDBC 连接地址 |
 | `CHIP_DB_USER` | `root` | 数据库用户 |
-| `CHIP_DB_PASSWORD` | `123456` | 仅用于本地教学的默认值，部署时必须覆盖 |
-| `CHIP_DEMO_DATA` | `true` | 是否插入演示数据 |
+| `CHIP_DB_PASSWORD` | `123456` | 本地开发默认值，部署时必须覆盖 |
+| `CHIP_SEED_DATA` | `true` | 是否写入预置业务数据 |
 | `CHIP_SQL_LOG_LEVEL` | `debug` | SQL 日志级别 |
 
 ### 3. 构建并运行
 
 ```bash
 mvn clean test package
-java -jar target/ChipSupplyTeachingSystem-1.0.0.jar
+java -jar target/ChipSupplyProcurementPlatform-1.0.0.jar
 ```
 
 启动后访问：
@@ -92,25 +92,25 @@ java -jar target/ChipSupplyTeachingSystem-1.0.0.jar
 | 物流 | `/api/logistics` | 物流记录查询与维护 |
 | 统计 | `/api/statistics` | 采购与库存指标 |
 
-## 教学数据集
+## 预置业务数据
 
 | 内容 | 规模 / 规则 |
 | --- | --- |
 | 芯片分类 | 6 类 |
 | 采购物料 | 24 条，12 个 MPN，每个 MPN 对应两家供应商 |
-| 供应商 / 客户 / 员工 | 6 / 3 / 3 个虚构主体 |
-| 库存 | 24 条，包含安全库存预警样本 |
+| 供应商 / 客户 / 员工 | 6 / 3 / 3 个业务主体 |
+| 库存 | 24 条，覆盖安全库存预警场景 |
 | 采购订单 | 72 笔，覆盖近六个月 |
-| 报价快照 | 24 页固定课堂报价 |
+| 报价快照 | 24 页版本化供应商报价 |
 
-数据源位于 `docs/chip_catalog.json`，运行时建表和种子数据位于 `src/main/resources/db/`。如需完全重置演示数据，请创建一个空数据库后重新启动应用；初始化器通过数据集版本避免重复插入。
+数据源位于 `docs/chip_catalog.json`，运行时建表和种子数据位于 `src/main/resources/db/`。如需完全重置预置数据，请创建空数据库后重新启动应用；初始化器通过数据集版本避免重复插入。
 
 ## 项目结构
 
 ```text
 chip-portal/                       原生采购工作台
 docs/                              数据字典与芯片目录
-scripts/                           教学数据和界面校验脚本
+scripts/                           数据生成与界面校验脚本
 src/main/java/com/chipsupply/
   controller/                      REST 接口
   service/                         业务规则
@@ -123,7 +123,7 @@ src/test/                          自动化测试
 
 ## 与多智能体项目协作
 
-`ChipChain-Procurement-Agent` 通过 MCP 将 Agent 工具映射到本项目的 REST API。两者采用独立数据库：本项目的 `chip_supply_db` 保存业务数据，Agent 项目的数据库保存账号、会话、检查点和沙箱绑定，避免业务状态与推理状态耦合。
+`ChipChain-Procurement-Agent` 通过 MCP 将 Agent 工具映射到本项目的 REST API。两者采用独立数据库：本项目的 `chip_supply_db` 保存供应链业务数据，Agent 项目的数据库保存账号、会话、检查点和沙箱绑定，避免业务状态与推理状态耦合。
 
 ## 验证
 
@@ -131,4 +131,4 @@ src/test/                          自动化测试
 mvn test
 ```
 
-> 安全提示：仓库内默认数据库密码只面向本地教学环境。任何共享或生产部署都应通过环境变量覆盖密码，并限制数据库与 Swagger 的网络访问范围。
+> 安全提示：仓库内数据库密码仅作为本地开发默认值。共享或生产部署应通过环境变量覆盖密码，并限制数据库与 Swagger 的网络访问范围。

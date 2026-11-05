@@ -35,12 +35,12 @@ class StaticPageTest {
         mvc.perform(get("/index.html"))
                 .andExpect(status().isOk())
                 .andExpect(result -> assertTrue(result.getResponse()
-                        .getContentAsString(StandardCharsets.UTF_8).contains("芯链 · 芯片采购实验室")));
+                        .getContentAsString(StandardCharsets.UTF_8).contains("芯链 · 芯片采购协同平台")));
     }
 
     @Test
     void productPagesAreAvailable() throws Exception {
-        mvc.perform(get("/quotes/LAB-MCU-01-01.html"))
+        mvc.perform(get("/quotes/CS-MCU-01-01.html"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("text/html"));
     }

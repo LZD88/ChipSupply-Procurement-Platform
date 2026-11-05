@@ -6,12 +6,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.chipsupply</groupId>
-    <artifactId>ChipSupplyTeachingSystem</artifactId>
+    <artifactId>ChipSupplyProcurementPlatform</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Chip Supply Teaching System</name>
-    <description>芯链 · 芯片采购实验室</description>
+    <name>ChipSupply Procurement Platform</name>
+    <description>芯链 · 芯片采购协同平台</description>
 
     <parent>
         <groupId>org.springframework.boot</groupId>

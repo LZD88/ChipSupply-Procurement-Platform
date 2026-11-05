@@ -15,8 +15,8 @@ public class SystemController {
 
     @GetMapping("/api/system/info")
     public Result<Map<String, Object>> info() {
-        return Result.success(Map.of("name", "芯链 · 芯片采购实验室", "version", "2.0.0",
-                "dataNotice", "供应商、料号与交易数据均为课堂虚构样本", "agentUrl", agentUrl,
+        return Result.success(Map.of("name", "芯链 · 芯片采购协同平台", "version", "3.0.0",
+                "dataNotice", "预置数据已脱敏，仅用于本地初始化与流程验证", "agentUrl", agentUrl,
                 "categories", Arrays.stream(PartCategoryEnum.values()).map(PartCategoryEnum::getCode).toList()));
     }
 }

@@ -4,7 +4,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const num = n => Number(n || 0).toLocaleString('zh-CN');
 const money = n => '¥' + Number(n || 0).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
 const statusNames = ['','待审核','已审核','采购中','已入库','已取消'];
-const labels = {overview:['采购总览','掌握每一颗芯片的供应节奏。'],catalog:['芯片目录','从料号到封装，找到适合教学方案的芯片。'],inventory:['库存监控','连接现有库存与补货需求，关注每一个供应缺口。'],orders:['采购订单','清晰记录从采购申请到芯片交付的全过程。'],suppliers:['供应网络','在价格、供货能力与交期之间，找到合适的平衡。']};
+const labels = {overview:['采购总览','掌握每一颗芯片的供应节奏。'],catalog:['芯片目录','从料号到封装，匹配业务需求与供应资源。'],inventory:['库存监控','连接现有库存与补货需求，关注每一个供应缺口。'],orders:['采购订单','清晰记录从采购申请到芯片交付的全过程。'],suppliers:['供应网络','在价格、供货能力与交期之间，找到合适的平衡。']};
 let state = {view:'overview', page:1, category:'', search:'', status:'', warningOnly:false, suppliers:[], parts:[]};
 let revision = 0;
 async function api(path, options={}) {
@@ -31,8 +31,8 @@ function ordersTable(orders, compact=false) {return table(['订单编号','采�
 async function overview() {
   const [dashboard, warnings, trend, orders] = await Promise.all([api('/statistics/dashboard'),api('/inventory/warning'),api('/statistics/monthly-trend'),api('/orders/page?size=5')]);
   const max = Math.max(...trend.map(t=>Number(t.totalAmount)),1);
-  const metrics = [['在册芯片物料',dashboard.partCount,'六类芯片 · 按供应商区分物料','▦'],['合作供应商',dashboard.supplierCount,'虚构教学供应网络','⌘'],['本月采购金额',money(dashboard.monthPurchase.totalAmount),`${dashboard.monthPurchase.orderCount} 笔采购订单`,'↗'],['库存预警',warnings.length,'当前库存低于补货阈值','◷']];
-  return `<section class="hero"><div class="hero-copy"><p class="eyebrow">FROM SILICON TO SUPPLY</p><h2>把每一次采购，连接成确定的交付。</h2><p>面向芯片供应链的教学工作空间。让物料、库存与采购决策，在同一处协同。</p><a class="hero-link" href="#catalog">探索芯片目录 <span>↗</span></a></div><div class="circuit" aria-hidden="true"><div class="chip-diagram"><strong>CHIP</strong></div></div></section>
+  const metrics = [['在册芯片物料',dashboard.partCount,'六类芯片 · 按供应商区分物料','▦'],['合作供应商',dashboard.supplierCount,'多节点供应网络','⌘'],['本月采购金额',money(dashboard.monthPurchase.totalAmount),`${dashboard.monthPurchase.orderCount} 笔采购订单`,'↗'],['库存预警',warnings.length,'当前库存低于补货阈值','◷']];
+  return `<section class="hero"><div class="hero-copy"><p class="eyebrow">FROM SILICON TO SUPPLY</p><h2>把每一次采购，连接成确定的交付。</h2><p>面向芯片供应链的采购协同平台。让物料、库存与采购决策，在同一处协同。</p><a class="hero-link" href="#catalog">探索芯片目录 <span>↗</span></a></div><div class="circuit" aria-hidden="true"><div class="chip-diagram"><strong>CHIP</strong></div></div></section>
   <div class="metrics">${metrics.map((m,i)=>`<div class="metric ${i===3?'warn':''}"><div class="metric-top"><span>${m[0]}</span><span class="metric-icon">${m[3]}</span></div><strong>${m[1]}</strong><small>${m[2]}</small></div>`).join('')}</div>
   <div class="grid-two"><section class="panel"><div class="panel-head"><div><h2>采购金额趋势</h2><small>按下单月份汇总 · 含所有订单状态</small></div><span class="pill">人民币 CNY</span></div><div class="trend" aria-label="每月采购金额">${trend.length?trend.map(t=>`<div class="bar-column" title="${escapeHtml(t.month)}：${money(t.totalAmount)}"><small>${num(Math.round(t.totalAmount))}</small><div class="bar" style="height:${Number(t.totalAmount)/max*82}%"></div><label>${escapeHtml(t.month.slice(5))}月</label></div>`).join(''):'<div class="empty">暂无采购记录</div>'}</div></section>
   <section class="panel"><div class="panel-head"><div><h2>待关注物料 <span class="pill">${warnings.length}</span></h2><small>优先查看库存预警</small></div><a href="#inventory">查看全部 ↗</a></div><div class="warning-list">${warnings.slice(0,4).map(w=>`<div class="warning-row"><span class="part-icon">IC</span><div><h3>${escapeHtml(w.partDetail?.name)}</h3><p>${escapeHtml(w.partDetail?.model)}</p></div><div class="quantity">${num(w.currentQuantity)}<small>安全量 ${num(w.safetyStock)} 片</small></div></div>`).join('')||'<div class="empty">库存充足，暂无预警</div>'}</div></section></div>
@@ -53,7 +53,7 @@ async function orders() {
   return `<div class="toolbar"><input class="search-field" id="search" aria-label="搜索订单" placeholder="搜索采购单编号" value="${escapeHtml(state.search)}"><select id="status-filter" aria-label="订单状态"><option value="">全部状态</option>${statusNames.slice(1).map((s,i)=>`<option value="${i+1}" ${String(i+1)===state.status?'selected':''}>${s}</option>`).join('')}</select><span class="count-label">${num(result.total)} 笔采购订单</span></div><section class="panel">${result.records.length?ordersTable(result.records):'<div class="empty">暂无匹配的订单。</div>'}${pagination(result)}</section>`;
 }
 async function suppliers() {
-  return `<div class="toolbar"><p class="muted">课堂供应网络 · 所有供应商均为虚构主体</p><span class="count-label">${state.suppliers.length} 个供应节点</span></div><div class="supplier-grid">${state.suppliers.map((s,i)=>`<article class="panel supplier-card"><div class="symbol">⌘ <span class="eyebrow">NODE ${String(i+1).padStart(2,'0')}</span></div><h3>${escapeHtml(s.name)}</h3><p class="mono">${escapeHtml(s.supplierCode)}</p><p>${escapeHtml(s.address)}</p><p>教学联系人：${escapeHtml(s.contactPerson)}</p><div class="card-bottom"><span class="status">${s.status===1?'合作中':'未合作'}</span><span class="pill">信用评级 ${escapeHtml(s.creditRating)}</span></div></article>`).join('')}</div>`;
+  return `<div class="toolbar"><p class="muted">供应网络 · 统一维护准入、评级与履约状态</p><span class="count-label">${state.suppliers.length} 个供应节点</span></div><div class="supplier-grid">${state.suppliers.map((s,i)=>`<article class="panel supplier-card"><div class="symbol">⌘ <span class="eyebrow">NODE ${String(i+1).padStart(2,'0')}</span></div><h3>${escapeHtml(s.name)}</h3><p class="mono">${escapeHtml(s.supplierCode)}</p><p>${escapeHtml(s.address)}</p><p>供应商联系人：${escapeHtml(s.contactPerson)}</p><div class="card-bottom"><span class="status">${s.status===1?'合作中':'未合作'}</span><span class="pill">信用评级 ${escapeHtml(s.creditRating)}</span></div></article>`).join('')}</div>`;
 }
 async function render() {
   const version=++revision;
@@ -88,9 +88,9 @@ async function newOrder(id) {
 }
 async function partDetails(id) {
   const p=await api('/parts/get/'+id);
-  modal(p.name,`<p class="eyebrow">${escapeHtml(p.partCode)}</p><dl class="spec-list">${Object.entries({'制造商':p.manufacturer,'制造商料号':p.manufacturerPartNumber,'封装':p.packageType,'规格参数':p.specification,'温度等级':p.temperatureGrade,'供应商':supplier(p.supplierId),'采购单价':money(p.purchasePrice)+' / 片','最小起订量':num(p.minOrderQuantity)+' 片','标准交期':num(p.leadTimeDays)+' 天'}).map(([k,v])=>`<div><dt>${k}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl><div class="form-actions"><button class="secondary" id="quote-link">查看教学报价快照 ↗</button><button class="primary" id="detail-buy">创建采购单</button></div>`);
+  modal(p.name,`<p class="eyebrow">${escapeHtml(p.partCode)}</p><dl class="spec-list">${Object.entries({'制造商':p.manufacturer,'制造商料号':p.manufacturerPartNumber,'封装':p.packageType,'规格参数':p.specification,'温度等级':p.temperatureGrade,'供应商':supplier(p.supplierId),'采购单价':money(p.purchasePrice)+' / 片','最小起订量':num(p.minOrderQuantity)+' 片','标准交期':num(p.leadTimeDays)+' 天'}).map(([k,v])=>`<div><dt>${k}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl><div class="form-actions"><button class="secondary" id="quote-link">查看供应商报价快照 ↗</button><button class="primary" id="detail-buy">创建采购单</button></div>`);
   $('#detail-buy').onclick=()=>run(()=>newOrder(id));
-  $('#quote-link').onclick=async()=>{const url='/quotes/'+encodeURIComponent(p.partCode)+'.html';const response=await fetch(url,{method:'HEAD'});if(response.ok)window.open(url,'_blank','noopener');else toast('该物料没有教学报价快照，可在采购单中填写实际单价');};
+  $('#quote-link').onclick=async()=>{const url='/quotes/'+encodeURIComponent(p.partCode)+'.html';const response=await fetch(url,{method:'HEAD'});if(response.ok)window.open(url,'_blank','noopener');else toast('该物料没有报价快照，可在采购单中填写实际单价');};
 }
 async function orderDetails(id) {
   const o=await api('/orders/get/'+id);

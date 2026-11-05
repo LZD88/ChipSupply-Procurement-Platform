@@ -16,9 +16,9 @@ public enum CustomerTypeEnum {
     RETAIL_STORE(2, "电子制造商"),
 
     /**
-     * 教学实验室
+     * 研发机构
      */
-    INDIVIDUAL(3, "教学实验室");
+    INDIVIDUAL(3, "研发机构");
 
     private final Integer code;
     private final String description;

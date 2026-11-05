@@ -5,7 +5,7 @@ server:
 
 spring:
   application:
-    name: ChipSupplyTeachingSystem
+    name: ChipSupplyProcurementPlatform
   autoconfigure:
     exclude: com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
 
@@ -71,17 +71,17 @@ chipsupply:
   # 数据初始化配置
   init:
     enabled: true
-    insert-sample-data: ${CHIP_DEMO_DATA:true}
+    insert-seed-data: ${CHIP_SEED_DATA:true}
   # 文件上传路径
   upload:
     path: ./uploads/
     max-size: 10MB
   # 系统配置
   system:
-    name: 芯链 · 芯片采购实验室
-    version: 2.0.0
+    name: 芯链 · 芯片采购协同平台
+    version: 3.0.0
     agent-url: ${CHIP_AGENT_URL:http://localhost:3000}
-    copyright: © 2024-2026 芯链 · 芯片采购实验室
+    copyright: © 2024-2026 芯链 · 芯片采购协同平台
 
 # MyBatis Plus 配置
 mybatis-plus:

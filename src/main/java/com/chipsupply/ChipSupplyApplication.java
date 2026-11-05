@@ -7,7 +7,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 /**
- * 芯链 · 芯片采购实验室 - 主启动类
+ * 芯链 · 芯片采购协同平台 - 主启动类
  *
  * @author System
  * @version 1.0.0
@@ -20,7 +20,7 @@ public class ChipSupplyApplication {
     public static void main(String[] args) {
         SpringApplication.run(ChipSupplyApplication.class, args);
         System.out.println("==========================================");
-        System.out.println("芯链 · 芯片采购实验室启动成功！");
+        System.out.println("芯链 · 芯片采购协同平台启动成功！");
         System.out.println("系统访问地址: http://localhost:8082");
         System.out.println("API文档地址: http://localhost:8082/swagger-ui.html");
         System.out.println("==========================================");

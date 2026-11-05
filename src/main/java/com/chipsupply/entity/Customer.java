@@ -59,7 +59,7 @@ public class Customer extends BaseEntity {
 
     /**
      * 客户类型
-     * 1-方案商, 2-电子制造商, 3-教学实验室
+     * 1-方案商, 2-电子制造商, 3-研发机构
      */
     @TableField("customer_type")
     private Integer customerType;

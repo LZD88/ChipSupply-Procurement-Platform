@@ -1,4 +1,4 @@
--- 芯链教学系统：业务库结构。唯一运行时 schema，生成导入文件时复用。
+-- 芯链采购协同平台：业务库结构。唯一运行时 schema，生成导入文件时复用。
 -- 1. 用户/员工表 (user)
 -- 注意：user是MySQL关键字，需要用反引号括起来
 CREATE TABLE IF NOT EXISTS `user` (
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS `part` (
   `part_code` varchar(50) NOT NULL COMMENT '物料编码',
   `name` varchar(100) NOT NULL COMMENT '物料名称',
   `model` varchar(100) DEFAULT NULL COMMENT '型号',
-  `manufacturer` varchar(100) DEFAULT NULL COMMENT '制造商（教学虚构）',
+  `manufacturer` varchar(100) DEFAULT NULL COMMENT '制造商',
   `manufacturer_part_number` varchar(100) DEFAULT NULL COMMENT '制造商料号 MPN',
   `package_type` varchar(50) DEFAULT NULL COMMENT '封装',
   `temperature_grade` varchar(50) DEFAULT NULL COMMENT '温度等级',
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS `customer` (
   `phone` varchar(20) DEFAULT NULL COMMENT '联系电话',
   `email` varchar(100) DEFAULT NULL COMMENT '邮箱',
   `address` varchar(200) DEFAULT NULL COMMENT '地址',
-  `customer_type` tinyint DEFAULT '1' COMMENT '客户类型(1-方案商, 2-电子制造商, 3-教学实验室)',
+  `customer_type` tinyint DEFAULT '1' COMMENT '客户类型(1-方案商, 2-电子制造商, 3-研发机构)',
   `discount_level` tinyint DEFAULT '1' COMMENT '折扣等级(1-无折扣, 2-银牌, 3-金牌, 4-钻石)',
   `registered_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '注册时间',
   `deleted` tinyint DEFAULT '0' COMMENT '删除标志(0-未删除, 1-已删除)',

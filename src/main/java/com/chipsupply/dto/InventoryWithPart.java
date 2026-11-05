@@ -146,7 +146,7 @@ public class InventoryWithPart {
         @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS")
         private LocalDateTime updateTime;
 
-        /** 制造商（教学虚构） */
+        /** 制造商 */
         private String manufacturer;
         public String getManufacturer() { return manufacturer; }
         public void setManufacturer(String value) { this.manufacturer = value; }
