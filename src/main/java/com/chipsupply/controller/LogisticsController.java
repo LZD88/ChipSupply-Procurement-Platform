@@ -6,6 +6,7 @@ import com.chipsupply.common.Result;
 import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.entity.Logistics;
 import com.chipsupply.service.LogisticsService;
+import com.chipsupply.audit.Auditable;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -34,6 +35,7 @@ public class LogisticsController {
      */
     @Operation(summary = "创建物流记录")
     @PostMapping("/create")
+    @Auditable(action = "LOGISTICS_CREATE", resourceType = "LOGISTICS")
     public Result<Logistics> create(@Validated @RequestBody Logistics logistics) {
         boolean success = logisticsService.save(logistics);
         if (!success) {
@@ -47,6 +49,7 @@ public class LogisticsController {
      */
     @Operation(summary = "更新物流信息")
     @PutMapping("/update/{id}")
+    @Auditable(action = "LOGISTICS_UPDATE", resourceType = "LOGISTICS")
     public Result<Logistics> update(
             @Parameter(description = "物流ID") @PathVariable Long id,
             @Validated @RequestBody Logistics logistics) {
@@ -63,6 +66,7 @@ public class LogisticsController {
      */
     @Operation(summary = "删除物流记录")
     @DeleteMapping("/delete/{id}")
+    @Auditable(action = "LOGISTICS_DELETE", resourceType = "LOGISTICS")
     public Result<Void> delete(@Parameter(description = "物流ID") @PathVariable Long id) {
         boolean success = logisticsService.removeById(id);
         if (!success) {
@@ -115,6 +119,7 @@ public class LogisticsController {
      */
     @Operation(summary = "更新物流状态")
     @PatchMapping("/update-status/{id}")
+    @Auditable(action = "LOGISTICS_STATUS_UPDATE", resourceType = "LOGISTICS")
     public Result<Void> updateStatus(
             @Parameter(description = "物流ID") @PathVariable Long id,
             @Parameter(description = "新状态") @RequestParam Integer status) {
@@ -130,6 +135,7 @@ public class LogisticsController {
      */
     @Operation(summary = "更新发货信息")
     @PatchMapping("/update-shipping/{id}")
+    @Auditable(action = "LOGISTICS_SHIPPING_UPDATE", resourceType = "LOGISTICS")
     public Result<Void> updateShipping(
             @Parameter(description = "物流ID") @PathVariable Long id,
             @Parameter(description = "发货时间") @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime shipTime,
@@ -147,6 +153,7 @@ public class LogisticsController {
      */
     @Operation(summary = "更新收货信息")
     @PatchMapping("/update-receiving/{id}")
+    @Auditable(action = "LOGISTICS_RECEIVING_UPDATE", resourceType = "LOGISTICS")
     public Result<Void> updateReceiving(
             @Parameter(description = "物流ID") @PathVariable Long id,
             @Parameter(description = "实际到达时间") @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime actualArrivalTime,

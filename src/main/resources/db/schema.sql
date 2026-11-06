@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   `username` varchar(50) NOT NULL COMMENT '用户名',
   `password` varchar(100) NOT NULL COMMENT '密码(加密)',
   `real_name` varchar(50) DEFAULT NULL COMMENT '真实姓名',
-  `role` varchar(50) DEFAULT 'purchase' COMMENT '角色(admin-管理员, purchase-采购员, warehouse-仓管员, sales-销售员)',
+  `role` varchar(50) DEFAULT 'purchase' COMMENT '角色(admin-管理员, purchase-采购员, warehouse-仓管员, sales-销售员, auditor-审计员, agent-采购智能体)',
   `department` varchar(50) DEFAULT '采购部' COMMENT '部门(采购部/仓储部/销售部/财务部)',
   `phone` varchar(20) DEFAULT NULL COMMENT '电话',
   `email` varchar(100) DEFAULT NULL COMMENT '邮箱',
@@ -134,7 +134,32 @@ CREATE TABLE IF NOT EXISTS `inventory` (
   CONSTRAINT `fk_inventory_part` FOREIGN KEY (`part_id`) REFERENCES `part` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='库存表';
 
--- 7. 客户表 (customer)
+-- 7. 安全与业务审计日志（只允许追加和查询，不提供修改/删除接口）
+CREATE TABLE IF NOT EXISTS `audit_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '审计ID',
+  `actor_id` bigint DEFAULT NULL COMMENT '操作人ID',
+  `actor_username` varchar(50) DEFAULT NULL COMMENT '操作账号',
+  `actor_role` varchar(50) DEFAULT NULL COMMENT '操作角色',
+  `action` varchar(80) NOT NULL COMMENT '操作动作',
+  `resource_type` varchar(80) NOT NULL COMMENT '资源类型',
+  `resource_id` varchar(100) DEFAULT NULL COMMENT '资源标识',
+  `http_method` varchar(10) DEFAULT NULL COMMENT 'HTTP方法',
+  `request_path` varchar(500) DEFAULT NULL COMMENT '请求路径',
+  `request_id` varchar(64) DEFAULT NULL COMMENT '请求追踪ID',
+  `result` varchar(20) NOT NULL COMMENT 'SUCCESS/FAILURE',
+  `detail_json` text COMMENT '脱敏后的操作摘要',
+  `ip_address` varchar(64) DEFAULT NULL COMMENT '客户端IP',
+  `user_agent` varchar(500) DEFAULT NULL COMMENT '客户端标识',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发生时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_actor` (`actor_username`),
+  KEY `idx_audit_resource` (`resource_type`, `resource_id`),
+  KEY `idx_audit_result` (`result`),
+  KEY `idx_audit_created_at` (`created_at`),
+  CONSTRAINT `fk_audit_actor` FOREIGN KEY (`actor_id`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='安全与业务审计日志';
+
+-- 8. 客户表 (customer)
 CREATE TABLE IF NOT EXISTS `customer` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '客户ID',
   `customer_code` varchar(50) NOT NULL COMMENT '客户编码',
@@ -156,7 +181,7 @@ CREATE TABLE IF NOT EXISTS `customer` (
   KEY `idx_registered_time` (`registered_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='客户表';
 
--- 8. 物流信息表 (logistics)
+-- 9. 物流信息表 (logistics)
 CREATE TABLE IF NOT EXISTS `logistics` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '物流ID',
   `order_id` bigint NOT NULL COMMENT '订单ID',

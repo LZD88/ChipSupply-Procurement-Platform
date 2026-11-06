@@ -82,6 +82,12 @@ chipsupply:
     version: 3.0.0
     agent-url: ${CHIP_AGENT_URL:http://localhost:3000}
     copyright: © 2024-2026 芯链 · 芯片采购协同平台
+  security:
+    # 生产环境务必通过环境变量覆盖；这里的回退值只用于离线本地联调。
+    jwt-secret: ${CHIP_JWT_SECRET:}
+    jwt-expiration-minutes: ${CHIP_JWT_EXPIRATION_MINUTES:480}
+    bootstrap-password: ${CHIP_BOOTSTRAP_PASSWORD:}
+    agent-password: ${CHIP_AGENT_PASSWORD:}
 
 # MyBatis Plus 配置
 mybatis-plus:

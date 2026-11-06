@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -30,6 +31,7 @@ public class User extends BaseEntity {
      * 密码（加密）
      */
     @NotBlank(message = "密码不能为空")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     /**
@@ -40,7 +42,8 @@ public class User extends BaseEntity {
 
     /**
      * 角色
-     * admin-管理员, purchase-采购员, warehouse-仓管员, sales-销售员
+     * admin-管理员, purchase-采购员, warehouse-仓管员, sales-销售员,
+     * auditor-审计员, agent-采购智能体
      */
     private String role;
 

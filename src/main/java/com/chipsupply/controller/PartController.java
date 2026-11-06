@@ -6,6 +6,7 @@ import com.chipsupply.common.Result;
 import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.entity.Part;
 import com.chipsupply.service.PartService;
+import com.chipsupply.audit.Auditable;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -35,6 +36,7 @@ public class PartController {
      */
     @Operation(summary = "创建芯片物料")
     @PostMapping("/create")
+    @Auditable(action = "PART_CREATE", resourceType = "PART")
     public Result<Part> create(@Valid @RequestBody Part part) {
         if (!com.chipsupply.common.enums.PartCategoryEnum.isValid(part.getCategory())) {
             throw new com.chipsupply.common.exception.BusinessException("请选择有效的芯片分类");
@@ -59,6 +61,7 @@ public class PartController {
      */
     @Operation(summary = "更新芯片物料")
     @PutMapping("/update/{id}")
+    @Auditable(action = "PART_UPDATE", resourceType = "PART")
     public Result<Part> update(
             @Parameter(description = "芯片物料ID") @PathVariable Long id,
             @Valid @RequestBody Part part) {
@@ -84,6 +87,7 @@ public class PartController {
      */
     @Operation(summary = "删除芯片物料")
     @DeleteMapping("/delete/{id}")
+    @Auditable(action = "PART_DELETE", resourceType = "PART")
     public Result<Void> delete(@Parameter(description = "芯片物料ID") @PathVariable Long id) {
         boolean success = partService.removeById(id);
         if (!success) {

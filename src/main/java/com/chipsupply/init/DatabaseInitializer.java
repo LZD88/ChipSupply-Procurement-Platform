@@ -8,6 +8,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.Order;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import javax.sql.DataSource;
@@ -15,6 +16,7 @@ import javax.sql.DataSource;
 /** 初始化独立的芯片供应链业务库。结构和导出 SQL 共用同一来源，不覆盖已有业务数据。 */
 @Component
 @RequiredArgsConstructor
+@Order(10)
 public class DatabaseInitializer implements ApplicationRunner {
     private final DataSource dataSource;
     private final JdbcTemplate jdbc;

@@ -7,6 +7,7 @@ import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.dto.InventoryWithPart;
 import com.chipsupply.entity.Inventory;
 import com.chipsupply.service.InventoryService;
+import com.chipsupply.audit.Auditable;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -64,6 +65,7 @@ public class InventoryController {
      */
     @Operation(summary = "入库操作")
     @PostMapping("/inbound")
+    @Auditable(action = "INVENTORY_INBOUND", resourceType = "INVENTORY")
     public Result<Void> inbound(
             @Parameter(description = "物料ID") @RequestParam Long partId,
             @Parameter(description = "入库数量") @RequestParam Integer quantity,
@@ -80,6 +82,7 @@ public class InventoryController {
      */
     @Operation(summary = "出库操作")
     @PostMapping("/outbound")
+    @Auditable(action = "INVENTORY_OUTBOUND", resourceType = "INVENTORY")
     public Result<Void> outbound(
             @Parameter(description = "物料ID") @RequestParam Long partId,
             @Parameter(description = "出库数量") @RequestParam Integer quantity) {
@@ -105,6 +108,7 @@ public class InventoryController {
      */
     @Operation(summary = "更新安全库存")
     @PatchMapping("/update-safety-stock/{id}")
+    @Auditable(action = "INVENTORY_SAFETY_STOCK_UPDATE", resourceType = "INVENTORY")
     public Result<Void> updateSafetyStock(
             @Parameter(description = "库存ID") @PathVariable Long id,
             @Parameter(description = "安全库存量") @RequestParam Integer safetyStock) {

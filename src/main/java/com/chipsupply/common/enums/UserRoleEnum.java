@@ -23,7 +23,13 @@ public enum UserRoleEnum {
     /**
      * 销售员
      */
-    SALES("sales", "销售员");
+    SALES("sales", "销售员"),
+
+    /** 审计员（只读业务数据与审计日志） */
+    AUDITOR("auditor", "审计员"),
+
+    /** 采购智能体服务账号 */
+    AGENT("agent", "采购智能体");
 
     private final String code;
     private final String description;

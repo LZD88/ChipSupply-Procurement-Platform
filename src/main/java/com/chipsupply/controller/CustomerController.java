@@ -6,6 +6,7 @@ import com.chipsupply.common.Result;
 import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.entity.Customer;
 import com.chipsupply.service.CustomerService;
+import com.chipsupply.audit.Auditable;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -33,6 +34,7 @@ public class CustomerController {
      */
     @Operation(summary = "创建客户")
     @PostMapping("/create")
+    @Auditable(action = "CUSTOMER_CREATE", resourceType = "CUSTOMER")
     public Result<Customer> create(@Valid @RequestBody Customer customer) {
         boolean success = customerService.save(customer);
         if (!success) {
@@ -46,6 +48,7 @@ public class CustomerController {
      */
     @Operation(summary = "更新客户")
     @PutMapping("/update/{id}")
+    @Auditable(action = "CUSTOMER_UPDATE", resourceType = "CUSTOMER")
     public Result<Customer> update(
             @Parameter(description = "客户ID") @PathVariable Long id,
             @Valid @RequestBody Customer customer) {
@@ -62,6 +65,7 @@ public class CustomerController {
      */
     @Operation(summary = "删除客户")
     @DeleteMapping("/delete/{id}")
+    @Auditable(action = "CUSTOMER_DELETE", resourceType = "CUSTOMER")
     public Result<Void> delete(@Parameter(description = "客户ID") @PathVariable Long id) {
         boolean success = customerService.removeById(id);
         if (!success) {
@@ -115,6 +119,7 @@ public class CustomerController {
      */
     @Operation(summary = "更新客户类型")
     @PatchMapping("/update-type/{id}")
+    @Auditable(action = "CUSTOMER_TYPE_UPDATE", resourceType = "CUSTOMER")
     public Result<Void> updateCustomerType(
             @Parameter(description = "客户ID") @PathVariable Long id,
             @Parameter(description = "新客户类型") @RequestParam Integer customerType) {
@@ -130,6 +135,7 @@ public class CustomerController {
      */
     @Operation(summary = "更新折扣等级")
     @PatchMapping("/update-discount/{id}")
+    @Auditable(action = "CUSTOMER_DISCOUNT_UPDATE", resourceType = "CUSTOMER")
     public Result<Void> updateDiscountLevel(
             @Parameter(description = "客户ID") @PathVariable Long id,
             @Parameter(description = "新折扣等级") @RequestParam Integer discountLevel) {

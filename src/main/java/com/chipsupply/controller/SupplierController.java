@@ -6,6 +6,7 @@ import com.chipsupply.common.Result;
 import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.entity.Supplier;
 import com.chipsupply.service.SupplierService;
+import com.chipsupply.audit.Auditable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +35,7 @@ public class SupplierController {
      */
     @Operation(summary = "创建供应商")
     @PostMapping("/create")
+    @Auditable(action = "SUPPLIER_CREATE", resourceType = "SUPPLIER")
     public Result<Supplier> create(@Valid @RequestBody Supplier supplier) {
         // 手动设置deleted、createTime、updateTime字段
         supplier.setDeleted(0);
@@ -51,6 +53,7 @@ public class SupplierController {
      */
     @Operation(summary = "更新供应商")
     @PutMapping("/update/{id}")
+    @Auditable(action = "SUPPLIER_UPDATE", resourceType = "SUPPLIER")
     public Result<Supplier> update(
             @Parameter(description = "供应商ID") @PathVariable Long id,
             @Valid @RequestBody Supplier supplier) {
@@ -69,6 +72,7 @@ public class SupplierController {
      */
     @Operation(summary = "删除供应商")
     @DeleteMapping("/delete/{id}")
+    @Auditable(action = "SUPPLIER_DELETE", resourceType = "SUPPLIER")
     public Result<Void> delete(@Parameter(description = "供应商ID") @PathVariable Long id) {
         boolean success = supplierService.removeById(id);
         if (!success) {
@@ -123,6 +127,7 @@ public class SupplierController {
      */
     @Operation(summary = "更新供应商状态")
     @PatchMapping("/update-status/{id}")
+    @Auditable(action = "SUPPLIER_STATUS_UPDATE", resourceType = "SUPPLIER")
     public Result<Void> updateStatus(
             @Parameter(description = "供应商ID") @PathVariable Long id,
             @Parameter(description = "新状态") @RequestParam Integer status) {
@@ -138,6 +143,7 @@ public class SupplierController {
      */
     @Operation(summary = "更新信用评级")
     @PatchMapping("/update-credit-rating/{id}")
+    @Auditable(action = "SUPPLIER_CREDIT_UPDATE", resourceType = "SUPPLIER")
     public Result<Void> updateCreditRating(
             @Parameter(description = "供应商ID") @PathVariable Long id,
             @Parameter(description = "新信用评级") @RequestParam String creditRating) {
