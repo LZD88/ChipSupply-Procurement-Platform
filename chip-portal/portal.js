@@ -4,11 +4,20 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const num = n => Number(n || 0).toLocaleString('zh-CN');
 const money = n => '¥' + Number(n || 0).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
 const statusNames = ['','待审核','已审核','采购中','已入库','已取消'];
-const labels = {overview:['采购总览','掌握每一颗芯片的供应节奏。'],catalog:['芯片目录','从料号到封装，匹配业务需求与供应资源。'],inventory:['库存监控','连接现有库存与补货需求，关注每一个供应缺口。'],orders:['采购订单','清晰记录从采购申请到芯片交付的全过程。'],suppliers:['供应网络','在价格、供货能力与交期之间，找到合适的平衡。']};
-let state = {view:'overview', page:1, category:'', search:'', status:'', warningOnly:false, suppliers:[], parts:[]};
+const labels = {overview:['采购总览','掌握每一颗芯片的供应节奏。'],catalog:['芯片目录','从料号到封装，匹配业务需求与供应资源。'],inventory:['库存监控','连接现有库存与补货需求，关注每一个供应缺口。'],orders:['采购订单','清晰记录从采购申请到芯片交付的全过程。'],suppliers:['供应网络','在价格、供货能力与交期之间，找到合适的平衡。'],audit:['审计日志','追踪关键业务操作与安全事件，形成可核验的责任链。']};
+const roleNames={admin:'管理员',purchase:'采购员',warehouse:'仓管员',sales:'销售员',auditor:'审计员',agent:'采购智能体'};
+let state = {view:'overview', page:1, category:'', search:'', status:'', warningOnly:false, suppliers:[], parts:[], user:null};
 let revision = 0;
+const tokenKey='chipsupply_access_token';
+const rememberedAccountKey='chipsupply_remembered_account';
+let loginAnimation=null;
+const hasRole=(...roles)=>state.user&&roles.includes(state.user.role);
 async function api(path, options={}) {
-  const response = await fetch('/api'+path, {headers:{'Content-Type':'application/json'}, ...options, signal:options.signal || AbortSignal.timeout(15000)});
+  const token=localStorage.getItem(tokenKey);
+  const headers={'Content-Type':'application/json',...(options.headers||{})};
+  if(token)headers.Authorization='Bearer '+token;
+  const response = await fetch('/api'+path, {...options,headers,signal:options.signal || AbortSignal.timeout(15000)});
+  if(response.status===401){localStorage.removeItem(tokenKey);showLogin();throw new Error('登录已失效，请重新登录');}
   if (!response.ok) throw new Error('服务暂不可用（HTTP '+response.status+'）');
   const result = await response.json();
   if (result.code !== 200) throw new Error(result.message || result.msg || '业务操作未完成');
@@ -55,13 +64,22 @@ async function orders() {
 async function suppliers() {
   return `<div class="toolbar"><p class="muted">供应网络 · 统一维护准入、评级与履约状态</p><span class="count-label">${state.suppliers.length} 个供应节点</span></div><div class="supplier-grid">${state.suppliers.map((s,i)=>`<article class="panel supplier-card"><div class="symbol">⌘ <span class="eyebrow">NODE ${String(i+1).padStart(2,'0')}</span></div><h3>${escapeHtml(s.name)}</h3><p class="mono">${escapeHtml(s.supplierCode)}</p><p>${escapeHtml(s.address)}</p><p>供应商联系人：${escapeHtml(s.contactPerson)}</p><div class="card-bottom"><span class="status">${s.status===1?'合作中':'未合作'}</span><span class="pill">信用评级 ${escapeHtml(s.creditRating)}</span></div></article>`).join('')}</div>`;
 }
+async function audit() {
+  const result=await api('/audit-logs/page?'+params({current:state.page,size:20,actor:state.search}));
+  return `<div class="toolbar"><input class="search-field" id="search" aria-label="搜索操作账号" placeholder="搜索操作账号" value="${escapeHtml(state.search)}"><span class="count-label">${num(result.total)} 条不可变审计记录</span></div><section class="panel">${result.records.length?table(['时间','操作账号 / 角色','动作','业务资源','结果','请求'],result.records.map(x=>`<tr><td class="mono">${escapeHtml((x.createdAt||'').replace('T',' '))}</td><td>${escapeHtml(x.actorUsername||'匿名')}<span class="model">${escapeHtml(roleNames[x.actorRole]||x.actorRole||'—')}</span></td><td class="mono">${escapeHtml(x.action)}</td><td>${escapeHtml(x.resourceType)}<span class="model">${escapeHtml(x.resourceId||'—')}</span></td><td><span class="status ${x.result==='FAILURE'?'s5':''}">${x.result==='SUCCESS'?'成功':'失败'}</span></td><td class="mono">${escapeHtml(x.httpMethod)} ${escapeHtml(x.requestPath)}</td></tr>`)):'<div class="empty">暂无审计记录。</div>'}${pagination(result)}</section>`;
+}
+function enforceRoleVisibility(){
+  if(!hasRole('admin','purchase'))$('#new-part')?.remove();
+  if(!hasRole('admin','purchase','agent'))document.querySelectorAll('[data-buy]').forEach(el=>el.remove());
+  if(!hasRole('admin','warehouse'))document.querySelectorAll('[data-stock]').forEach(el=>el.remove());
+}
 async function render() {
   const version=++revision;
   $('#error').hidden=true;
   try {
-    const markup=await ({overview,catalog,inventory,orders,suppliers}[state.view])();
+    const markup=await ({overview,catalog,inventory,orders,suppliers,audit}[state.view])();
     if(version!==revision)return;
-    $('#view').innerHTML=markup; $('#connection').textContent='业务服务已连接'; bindView();
+    $('#view').innerHTML=markup; $('#connection').textContent='业务服务已连接'; enforceRoleVisibility(); bindView();
   } catch(e) {if(version===revision){error('数据读取失败：'+e.message+'。请确认 Java 服务与 MySQL 已启动，然后点击刷新。'); $('#connection').textContent='连接中断'; $('#view').innerHTML='<div class="empty">数据暂不可用</div>';}}
 }
 function navigate() {
@@ -88,14 +106,16 @@ async function newOrder(id) {
 }
 async function partDetails(id) {
   const p=await api('/parts/get/'+id);
-  modal(p.name,`<p class="eyebrow">${escapeHtml(p.partCode)}</p><dl class="spec-list">${Object.entries({'制造商':p.manufacturer,'制造商料号':p.manufacturerPartNumber,'封装':p.packageType,'规格参数':p.specification,'温度等级':p.temperatureGrade,'供应商':supplier(p.supplierId),'采购单价':money(p.purchasePrice)+' / 片','最小起订量':num(p.minOrderQuantity)+' 片','标准交期':num(p.leadTimeDays)+' 天'}).map(([k,v])=>`<div><dt>${k}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl><div class="form-actions"><button class="secondary" id="quote-link">查看供应商报价快照 ↗</button><button class="primary" id="detail-buy">创建采购单</button></div>`);
-  $('#detail-buy').onclick=()=>run(()=>newOrder(id));
+  modal(p.name,`<p class="eyebrow">${escapeHtml(p.partCode)}</p><dl class="spec-list">${Object.entries({'制造商':p.manufacturer,'制造商料号':p.manufacturerPartNumber,'封装':p.packageType,'规格参数':p.specification,'温度等级':p.temperatureGrade,'供应商':supplier(p.supplierId),'采购单价':money(p.purchasePrice)+' / 片','最小起订量':num(p.minOrderQuantity)+' 片','标准交期':num(p.leadTimeDays)+' 天'}).map(([k,v])=>`<div><dt>${k}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl><div class="form-actions"><button class="secondary" id="quote-link">查看供应商报价快照 ↗</button>${hasRole('admin','purchase','agent')?'<button class="primary" id="detail-buy">创建采购单</button>':''}</div>`);
+  if($('#detail-buy'))$('#detail-buy').onclick=()=>run(()=>newOrder(id));
   $('#quote-link').onclick=async()=>{const url='/quotes/'+encodeURIComponent(p.partCode)+'.html';const response=await fetch(url,{method:'HEAD'});if(response.ok)window.open(url,'_blank','noopener');else toast('该物料没有报价快照，可在采购单中填写实际单价');};
 }
 async function orderDetails(id) {
   const o=await api('/orders/get/'+id);
-  modal('采购单 '+o.orderNumber,`<div class="form-actions">${pill(o.status)}<strong>${money(o.totalAmount)}</strong></div>${table(['物料','数量','单价','小计'],(o.orderDetail||[]).map(d=>`<tr><td>${partLabel(d.partDetail)}</td><td>${num(d.quantity)} 片</td><td>${money(d.unitPrice)}</td><td>${money(d.subtotal)}</td></tr>`))}<dl class="spec-list"><div><dt>预计交货</dt><dd>${escapeHtml(o.expectedDeliveryDate||'未设置')}</dd></div><div><dt>备注</dt><dd>${escapeHtml(o.remark||'无')}</dd></div></dl><form id="status-form"><div class="form-grid"><label>更新订单状态<select name="status">${statusNames.slice(1).map((s,i)=>`<option value="${i+1}" ${i+1===o.status?'selected':''}>${s}</option>`).join('')}</select></label></div><p class="form-error" role="alert"></p><div class="form-actions"><small class="muted">订单状态与库存登记独立，请在库存监控登记出入库。</small><button class="primary" type="submit">保存状态</button></div></form>`);
-  formTask($('#status-form'),f=>api('/orders/update-status/'+id+'?status='+f.get('status'),{method:'PATCH'}));
+  const transitions=hasRole('admin','purchase')?await api('/orders/'+id+'/allowed-transitions'):[];
+  const statusForm=transitions.length?`<form id="status-form"><div class="form-grid"><label>流转至下一状态<select name="status">${transitions.map(s=>`<option value="${s.code}">${escapeHtml(s.description)}</option>`).join('')}</select></label></div><p class="form-error" role="alert"></p><div class="form-actions"><small class="muted">流转到“已入库”时，订单明细会在同一事务中自动增加库存。</small><button class="primary" type="submit">确认流转</button></div></form>`:'<p class="notice section-gap">当前状态没有可执行的下一步，或你的角色只有查看权限。</p>';
+  modal('采购单 '+o.orderNumber,`<div class="form-actions">${pill(o.status)}<strong>${money(o.totalAmount)}</strong></div>${table(['物料','数量','单价','小计'],(o.orderDetail||[]).map(d=>`<tr><td>${partLabel(d.partDetail)}</td><td>${num(d.quantity)} 片</td><td>${money(d.unitPrice)}</td><td>${money(d.subtotal)}</td></tr>`))}<dl class="spec-list"><div><dt>预计交货</dt><dd>${escapeHtml(o.expectedDeliveryDate||'未设置')}</dd></div><div><dt>备注</dt><dd>${escapeHtml(o.remark||'无')}</dd></div></dl>${statusForm}`);
+  if($('#status-form'))formTask($('#status-form'),f=>api('/orders/update-status/'+id+'?status='+f.get('status'),{method:'PATCH'}));
 }
 async function stockForm(id, mode) {
   const p=await api('/parts/get/'+id);const inbound=mode==='inbound';
@@ -119,10 +139,30 @@ function bindView() {
   if($('#warning-only'))$('#warning-only').onchange=e=>{state.warningOnly=e.target.checked;state.page=1;render();};
   if($('#new-part'))$('#new-part').onclick=()=>run(newPart);
 }
+function initLoginAnimation(){
+  if(loginAnimation||!window.lottie||!$('#login-lottie'))return;
+  const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  loginAnimation=window.lottie.loadAnimation({container:$('#login-lottie'),renderer:'svg',loop:!reduceMotion,autoplay:false,path:'/animations/supply-network.json',rendererSettings:{preserveAspectRatio:'xMidYMid meet'}});
+  loginAnimation.addEventListener('DOMLoaded',()=>{
+    if(reduceMotion)loginAnimation.goToAndStop(80,true);
+    else{loginAnimation.setSpeed(.9);loginAnimation.play();}
+  });
+}
+function showLogin(){
+  state.user=null;$('#login-screen').hidden=false;$('#logout').hidden=true;initLoginAnimation();
+  if(loginAnimation&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)loginAnimation.play();
+  const remembered=localStorage.getItem(rememberedAccountKey);
+  if(remembered&&!$('#login-form').elements.username.value){$('#login-form').elements.username.value=remembered;$('#remember-account').checked=true;}
+}
+function applyIdentity(){const u=state.user;$('#login-screen').hidden=true;if(loginAnimation)loginAnimation.pause();$('#logout').hidden=false;$('#side-user').textContent=u.realName||u.username;$('#side-role').textContent=roleNames[u.role]||u.role;$('#side-avatar').textContent=(u.realName||u.username).slice(0,1);$('#top-avatar').textContent=(u.realName||u.username).slice(0,1);document.querySelectorAll('[data-roles]').forEach(el=>el.hidden=!el.dataset.roles.split(',').includes(u.role));$('#new-order').hidden=!hasRole('admin','purchase','agent');}
 async function initialize() {
-  try {const [info,suppliers]=await Promise.all([api('/system/info'),allPages('/suppliers/page')]);state.suppliers=suppliers;state.categories=info.categories;navigate();}catch(e){error('无法连接芯片采购服务：'+e.message);$('#connection').textContent='连接中断';$('#view').innerHTML='<div class="empty">请启动 Java 服务后刷新页面。</div>';}
+  if(!localStorage.getItem(tokenKey)){showLogin();return;}
+  try {state.user=await api('/auth/me');applyIdentity();const [info,suppliers]=await Promise.all([api('/system/info'),allPages('/suppliers/page')]);state.suppliers=suppliers;state.categories=info.categories;navigate();}catch(e){if(localStorage.getItem(tokenKey)){error('无法连接芯片采购服务：'+e.message);$('#connection').textContent='连接中断';$('#view').innerHTML='<div class="empty">请启动 Java 服务后刷新页面。</div>';}}
 }
 $('#today').textContent=new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'});
 $('#refresh').onclick=initialize;$('#new-order').onclick=()=>run(()=>newOrder());$('#close-modal').onclick=()=>$('#modal').close();
+$('#logout').onclick=()=>{localStorage.removeItem(tokenKey);location.hash='overview';showLogin();};
+$('#toggle-password').onclick=()=>{const input=$('#login-password');const reveal=input.type==='password';input.type=reveal?'text':'password';$('#toggle-password').setAttribute('aria-pressed',String(reveal));$('#toggle-password').setAttribute('aria-label',reveal?'隐藏密码':'显示密码');};
+$('#login-form').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;const button=form.querySelector('[type=submit]');const buttonText=button.querySelector('span');button.disabled=true;buttonText.textContent='正在验证身份…';$('#login-error').textContent='';try{const data=Object.fromEntries(new FormData(form));const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok||result.code!==200)throw new Error(result.message||'登录失败');if($('#remember-account').checked)localStorage.setItem(rememberedAccountKey,data.username);else localStorage.removeItem(rememberedAccountKey);localStorage.setItem(tokenKey,result.data.token);form.elements.password.value='';await initialize();}catch(e){$('#login-error').textContent=e.message;}finally{button.disabled=false;buttonText.textContent='进入工作空间';}};
 window.addEventListener('hashchange',()=>{if(state.categories)navigate();});
 initialize();

@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
@@ -20,7 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class StaticPageTest {
 
     @Configuration(proxyBeanMethods = false)
-    @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
+    @EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class,
+            SecurityAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class})
     static class TestApplication {
     }
 
@@ -43,6 +46,16 @@ class StaticPageTest {
         mvc.perform(get("/quotes/CS-MCU-01-01.html"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("text/html"));
+    }
+
+    @Test
+    void loginAnimationIsPackagedLocally() throws Exception {
+        mvc.perform(get("/vendor/lottie.min.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/javascript"));
+        mvc.perform(get("/animations/supply-network.json"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/json"));
     }
 
     @Test

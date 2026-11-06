@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123c43"><title>芯链 · 芯片采购协同平台</title><link rel="icon" href="/chip.svg"><link rel="stylesheet" href="/portal.css"><script defer src="/portal.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123c43"><title>芯链 · 芯片采购协同平台</title><link rel="icon" href="/chip.svg"><link rel="stylesheet" href="/portal.css"><script defer src="/vendor/lottie.min.js"></script><script defer src="/portal.js"></script></head>
 <body>
 <aside class="sidebar">
   <a class="brand" href="#overview"><img src="/chip.svg" alt=""><div>芯链<span>CHIP SUPPLY PLATFORM</span></div></a>
@@ -12,11 +12,12 @@
     <a href="#inventory" data-nav="inventory"><span>▤</span> 库存监控</a>
     <a href="#orders" data-nav="orders"><span>≡</span> 采购订单</a>
     <a href="#suppliers" data-nav="suppliers"><span>⌘</span> 供应网络</a>
+    <a href="#audit" data-nav="audit" data-roles="admin,auditor"><span>◎</span> 审计日志</a>
   </nav>
-  <div class="sidebar-bottom"><div class="avatar">采</div><div>供应链运营中心<small>采购协同 · 履约跟踪</small></div></div>
+  <div class="sidebar-bottom"><div class="avatar" id="side-avatar">采</div><div><span id="side-user">未登录</span><small id="side-role">安全身份校验中</small></div></div>
 </aside>
 <main class="main">
-  <header class="topbar"><div><span class="breadcrumb">工作空间 / </span><span id="breadcrumb">采购总览</span></div><div class="topbar-right"><span class="live-tag" id="connection">正在连接</span><span class="date" id="today"></span><span class="user-avatar">教</span></div></header>
+  <header class="topbar"><div><span class="breadcrumb">工作空间 / </span><span id="breadcrumb">采购总览</span></div><div class="topbar-right"><span class="live-tag" id="connection">正在连接</span><span class="date" id="today"></span><button class="logout-button" id="logout" hidden>退出</button><span class="user-avatar" id="top-avatar">—</span></div></header>
   <div class="content">
     <div class="page-heading"><div><p class="eyebrow">SEMICONDUCTOR PROCUREMENT</p><h1 id="page-title">采购总览<span class="title-dot">.</span></h1><p id="page-description">掌握每一颗芯片的供应节奏。</p></div><div class="heading-actions"><button class="secondary" id="refresh">↻ 刷新数据</button><button class="primary" id="new-order">＋ 新建采购单</button></div></div>
     <div id="error" class="error-banner" role="alert" hidden></div>
@@ -26,4 +27,41 @@
 </main>
 <dialog id="modal"><div class="modal-head"><h2 id="modal-title"></h2><button class="icon-button" id="close-modal" aria-label="关闭弹窗">×</button></div><div id="modal-body"></div></dialog>
 <div id="toast" role="status" hidden></div>
+<div id="login-screen" class="login-screen" hidden>
+  <div class="login-shell">
+    <section class="login-visual" aria-label="芯片供应网络动态展示">
+      <div class="login-brand"><img src="/chip.svg" alt=""><div><strong>芯链</strong><span>CHIP SUPPLY PLATFORM</span></div></div>
+      <div class="visual-copy">
+        <span class="login-kicker"><i></i> SUPPLY INTELLIGENCE OS</span>
+        <h1>让每一次采购，<br>沿着可信链路抵达<span>。</span></h1>
+        <p>连接物料、供应商、订单与库存，把复杂的芯片供应协同转化为清晰、可控的业务流程。</p>
+      </div>
+      <div class="animation-stage">
+        <div class="stage-grid" aria-hidden="true"></div>
+        <div id="login-lottie" class="login-lottie" aria-hidden="true"></div>
+        <div class="stage-chip" aria-hidden="true"><span>AI</span><small>PROCUREMENT</small></div>
+        <div class="network-node node-supplier"><i></i><span>供应商网络<small>SUPPLIER NODE</small></span></div>
+        <div class="network-node node-inventory"><i></i><span>实时库存<small>INVENTORY SYNC</small></span></div>
+        <div class="network-node node-order"><i></i><span>订单流转<small>ORDER FLOW</small></span></div>
+      </div>
+      <div class="visual-metrics">
+        <span><i>01</i> 多角色协同</span><span><i>02</i> 全链路审计</span><span><i>03</i> 智能采购决策</span>
+      </div>
+      <p class="login-copyright">© 2026 CHIP SUPPLY PLATFORM · LOCAL SECURE WORKSPACE</p>
+    </section>
+    <section class="login-access">
+      <form id="login-form" class="login-card">
+        <div class="access-mark"><span></span> 企业工作台</div>
+        <div class="login-heading"><p>欢迎回来</p><h2>登录芯链工作空间</h2><span>根据你的岗位角色，安全进入对应业务视图。</span></div>
+        <label class="login-field"><span>工作账号</span><div class="input-shell"><i class="input-icon user-icon" aria-hidden="true"></i><input name="username" autocomplete="username" required placeholder="请输入工作账号"></div></label>
+        <label class="login-field"><span>登录密码</span><div class="input-shell"><i class="input-icon lock-icon" aria-hidden="true"></i><input id="login-password" name="password" type="password" autocomplete="current-password" required placeholder="请输入登录密码"><button type="button" id="toggle-password" class="password-toggle" aria-label="显示密码" aria-pressed="false"><i></i></button></div></label>
+        <div class="login-options"><label><input type="checkbox" id="remember-account"> 记住账号</label><span><i></i> RBAC 安全认证</span></div>
+        <p id="login-error" class="form-error" role="alert"></p>
+        <button class="login-submit" type="submit"><span>进入工作空间</span><i>→</i></button>
+        <div class="security-note"><span class="shield-icon">✓</span><p><strong>受保护的本地访问</strong><small>身份令牌、角色权限与操作审计已启用</small></p></div>
+      </form>
+      <p class="access-footer">遇到账号问题，请联系供应链运营管理员</p>
+    </section>
+  </div>
+</div>
 </body></html>
