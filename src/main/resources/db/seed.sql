@@ -269,4 +269,37 @@ INSERT INTO `logistics` (`id`, `order_id`, `logistics_company`, `tracking_number
 INSERT INTO `purchase_order` (`id`, `order_number`, `total_amount`, `status`, `order_time`, `expected_delivery_date`, `actual_delivery_date`, `created_by`, `remark`, `create_time`) VALUES (72, 'CS-PO-0072', 7164.00, 4, DATE_SUB(CURDATE(), INTERVAL 161 DAY), DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 161 DAY), INTERVAL 7 DAY), DATE_SUB(CURDATE(), INTERVAL 154 DAY), 2, '芯片采购 / CS-IMU-06 / 第6批', DATE_SUB(CURDATE(), INTERVAL 161 DAY)) ON DUPLICATE KEY UPDATE id=id;
 INSERT INTO `order_detail` (`id`, `order_id`, `part_id`, `quantity`, `unit_price`, `remark`, `create_time`) VALUES (72, 72, 24, 400, 17.91, '芯片采购业务数据', DATE_SUB(CURDATE(), INTERVAL 161 DAY)) ON DUPLICATE KEY UPDATE id=id;
 INSERT INTO `logistics` (`id`, `order_id`, `logistics_company`, `tracking_number`, `status`, `ship_time`, `actual_arrival_time`, `receiver`, `remark`) VALUES (72, 72, '芯达供应链物流', 'CS-ESD-00072', 3, DATE_SUB(CURDATE(), INTERVAL 161 DAY), DATE_SUB(CURDATE(), INTERVAL 154 DAY), '仓储专员', '防静电袋 / 干燥剂 / 密封交接') ON DUPLICATE KEY UPDATE id=id;
+INSERT IGNORE INTO `goods_receipt`
+(`receipt_number`,`order_id`,`received_quantity`,`received_amount`,`received_at`,`warehouse_location`,`receiver`,`status`,`remark`)
+SELECT CONCAT('GR-', LPAD(o.id, 6, '0')), o.id,
+       SUM(od.quantity) - IF(MOD(o.id, 11)=0, GREATEST(1,FLOOR(SUM(od.quantity)*0.03)), 0),
+       ROUND(o.total_amount - IF(MOD(o.id,11)=0,o.total_amount*0.03,0),2),
+       COALESCE(CONCAT(o.actual_delivery_date,' 10:00:00'), DATE_ADD(o.order_time, INTERVAL 7 DAY)),
+       'ESD-A / 验收区', '仓储专员', 'CONFIRMED', IF(MOD(o.id,11)=0,'到货短装，等待供应商补发','数量与外观验收完成')
+FROM purchase_order o JOIN order_detail od ON od.order_id=o.id WHERE o.status=4 AND o.deleted=0 AND od.deleted=0 GROUP BY o.id;
+
+INSERT IGNORE INTO `supplier_invoice`
+(`invoice_number`,`order_id`,`supplier_id`,`invoice_quantity`,`invoice_amount`,`invoice_date`,`tax_rate`,`status`,`remark`)
+SELECT CONCAT('INV-', LPAD(o.id, 8, '0')), o.id, MIN(p.supplier_id), SUM(od.quantity),
+       ROUND(o.total_amount + IF(MOD(o.id,13)=0,88.00,0),2), COALESCE(o.actual_delivery_date, DATE(o.order_time)),
+       13.00, 'RECEIVED', IF(MOD(o.id,13)=0,'发票金额包含额外费用，待采购复核','电子专票已接收')
+FROM purchase_order o JOIN order_detail od ON od.order_id=o.id JOIN part p ON p.id=od.part_id
+WHERE o.status=4 AND o.deleted=0 AND od.deleted=0 GROUP BY o.id;
+
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-CREATE-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'PURCHASE_ORDER_CREATED','PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'procurement_agent','procurement-service','COMPLETED',CONCAT('采购订单 ',o.order_number,' 已创建'),'{}',o.order_time FROM purchase_order o WHERE o.deleted=0;
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-RECEIPT-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'GOODS_RECEIPT_CONFIRMED','PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_3','warehouse-service','COMPLETED',CONCAT('订单 ',o.order_number,' 完成到货验收'),'{}',gr.received_at FROM purchase_order o JOIN goods_receipt gr ON gr.order_id=o.id WHERE o.status=4 AND o.deleted=0;
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-INVOICE-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'SUPPLIER_INVOICE_RECEIVED','PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_1','finance-service','COMPLETED',CONCAT('订单 ',o.order_number,' 已接收供应商发票'),'{}',CONCAT(si.invoice_date,' 14:00:00') FROM purchase_order o JOIN supplier_invoice si ON si.order_id=o.id WHERE o.status=4 AND o.deleted=0;
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-WORKFLOW-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'ORDER_STATUS_CHANGED','PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_2','workflow-service','COMPLETED',CONCAT('订单 ',o.order_number,' 已完成审批并进入采购执行'),'{}',DATE_ADD(o.order_time,INTERVAL 1 DAY) FROM purchase_order o WHERE o.status=4 AND o.deleted=0;
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-INVENTORY-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'INVENTORY_INBOUND','PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_3','inventory-service','COMPLETED',CONCAT('订单 ',o.order_number,' 对应物料已更新可用库存'),'{}',DATE_ADD(gr.received_at,INTERVAL 5 MINUTE) FROM purchase_order o JOIN goods_receipt gr ON gr.order_id=o.id WHERE o.status=4 AND o.deleted=0;
+
 INSERT IGNORE INTO chip_dataset(version) VALUES ('chip-supply-v3');

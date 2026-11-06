@@ -35,9 +35,11 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/index.html", "/portal.js", "/portal.css", "/chip.svg",
-                                "/quotes/**", "/favicon.ico", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                                "/quotes/**", "/favicon.ico", "/swagger-ui/**", "/v3/api-docs/**",
+                                "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/audit-logs/**").hasAnyRole("ADMIN", "AUDITOR")
+                        .requestMatchers(HttpMethod.POST, "/api/control-tower/reconciliation/**").hasAnyRole("ADMIN", "PURCHASE", "WAREHOUSE")
                         .requestMatchers(HttpMethod.POST, "/api/orders/create").hasAnyRole("ADMIN", "PURCHASE", "AGENT")
                         .requestMatchers(HttpMethod.PUT, "/api/orders/update/**").hasAnyRole("ADMIN", "PURCHASE", "AGENT")
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/update-status/**").hasAnyRole("ADMIN", "PURCHASE")

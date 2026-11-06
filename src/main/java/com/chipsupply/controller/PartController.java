@@ -7,6 +7,7 @@ import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.entity.Part;
 import com.chipsupply.service.PartService;
 import com.chipsupply.audit.Auditable;
+import com.chipsupply.infrastructure.RedisHotDataService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -30,6 +31,7 @@ import java.util.List;
 public class PartController {
 
     private final PartService partService;
+    private final RedisHotDataService hotData;
 
     /**
      * 创建芯片物料
@@ -53,6 +55,7 @@ public class PartController {
         if (!success) {
             return Result.error();
         }
+        hotData.evict("part", part.getId());
         return Result.success(part);
     }
 
@@ -79,6 +82,7 @@ public class PartController {
         if (!success) {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }
+        hotData.evict("part", id);
         return Result.success(part);
     }
 
@@ -93,6 +97,7 @@ public class PartController {
         if (!success) {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }
+        hotData.evict("part", id);
         return Result.success();
     }
 
@@ -102,7 +107,7 @@ public class PartController {
     @Operation(summary = "获取单个芯片物料")
     @GetMapping("/get/{id}")
     public Result<Part> getById(@Parameter(description = "芯片物料ID") @PathVariable Long id) {
-        Part part = partService.getById(id);
+        Part part = hotData.getOrLoad("part", id, Part.class, () -> partService.getById(id));
         if (part == null) {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }

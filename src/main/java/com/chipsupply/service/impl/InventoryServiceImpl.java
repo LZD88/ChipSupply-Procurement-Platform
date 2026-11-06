@@ -10,6 +10,8 @@ import com.chipsupply.entity.Part;
 import com.chipsupply.mapper.InventoryMapper;
 import com.chipsupply.mapper.PartMapper;
 import com.chipsupply.service.InventoryService;
+import com.chipsupply.service.BusinessEventService;
+import com.chipsupply.infrastructure.RedisHotDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,12 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
 
     @Autowired
     private PartMapper partMapper;
+
+    @Autowired
+    private BusinessEventService eventService;
+
+    @Autowired
+    private RedisHotDataService hotData;
 
     @Override
     public Page<Inventory> pageInventories(Page<Inventory> page, String partName, String warehouseLocation) {
@@ -58,8 +66,16 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
         }
 
         int safetyStock = part.getStockWarningValue() != null ? part.getStockWarningValue() : 100;
-        return baseMapper.atomicInbound(partId, quantity, safetyStock,
-                StringUtils.hasText(warehouseLocation) ? warehouseLocation : null) > 0;
+        boolean success = hotData.withInventoryLock(partId, () ->
+                baseMapper.atomicInbound(partId, quantity, safetyStock,
+                        StringUtils.hasText(warehouseLocation) ? warehouseLocation : null) > 0);
+        if (success && eventService != null) {
+            eventService.record("INVENTORY_INBOUND", "PART", partId, null,
+                    "inventory-service", part.getName() + " 完成入库",
+                    Map.of("partId", partId, "quantity", quantity));
+        }
+        if (success) evictInventoryCache(partId);
+        return success;
     }
 
     @Override
@@ -69,7 +85,13 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
             return false;
         }
 
-        return baseMapper.atomicOutbound(partId, quantity) == 1;
+        boolean success = hotData.withInventoryLock(partId, () -> baseMapper.atomicOutbound(partId, quantity) == 1);
+        if (success && eventService != null) {
+            eventService.record("INVENTORY_OUTBOUND", "PART", partId, null,
+                    "inventory-service", "库存出库完成", Map.of("partId", partId, "quantity", quantity));
+        }
+        if (success) evictInventoryCache(partId);
+        return success;
     }
 
     @Override
@@ -116,6 +138,22 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
     public Page<InventoryWithPart> pageInventoriesWithPart(Page<Inventory> page, String partName, String warehouseLocation) {
         LambdaQueryWrapper<Inventory> wrapper = new LambdaQueryWrapper<>();
 
+        Map<Long, Part> matchedPartMap = null;
+        if (StringUtils.hasText(partName)) {
+            LambdaQueryWrapper<Part> partFilter = new LambdaQueryWrapper<>();
+            partFilter.and(w -> w.like(Part::getName, partName)
+                    .or().like(Part::getModel, partName)
+                    .or().like(Part::getPartCode, partName)
+                    .or().like(Part::getManufacturerPartNumber, partName));
+            matchedPartMap = partMapper.selectList(partFilter).stream()
+                    .collect(Collectors.toMap(Part::getId, p -> p));
+            if (matchedPartMap.isEmpty()) {
+                return new Page<>(page.getCurrent(), page.getSize(), 0);
+            }
+            // 必须在数据库分页前按物料 ID 过滤，避免目标物料位于后续页时被误判为无库存。
+            wrapper.in(Inventory::getPartId, matchedPartMap.keySet());
+        }
+
         if (StringUtils.hasText(warehouseLocation)) {
             wrapper.like(Inventory::getWarehouseLocation, warehouseLocation);
         }
@@ -135,22 +173,23 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
                 .distinct()
                 .collect(Collectors.toList());
 
-        LambdaQueryWrapper<Part> partWrapper = new LambdaQueryWrapper<>();
-        partWrapper.in(Part::getId, partIds);
-        if (StringUtils.hasText(partName)) {
-            partWrapper.like(Part::getName, partName);
+        Map<Long, Part> partMap;
+        if (matchedPartMap != null) {
+            Map<Long, Part> filteredPartMap = matchedPartMap;
+            partMap = partIds.stream().filter(filteredPartMap::containsKey)
+                    .collect(Collectors.toMap(id -> id, filteredPartMap::get));
+        } else {
+            LambdaQueryWrapper<Part> partWrapper = new LambdaQueryWrapper<>();
+            partWrapper.in(Part::getId, partIds);
+            partMap = partMapper.selectList(partWrapper).stream()
+                    .collect(Collectors.toMap(Part::getId, p -> p));
         }
-        Map<Long, Part> partMap = partMapper.selectList(partWrapper).stream()
-                .collect(Collectors.toMap(Part::getId, p -> p));
 
         // 过滤：只保留芯片物料名匹配的库存记录
         List<InventoryWithPart> dtoList = new ArrayList<>();
         for (Inventory inv : result.getRecords()) {
             Part part = partMap.get(inv.getPartId());
             if (part == null) {
-                continue;
-            }
-            if (StringUtils.hasText(partName) && !part.getName().contains(partName)) {
                 continue;
             }
             dtoList.add(convertToWithPart(inv, part));
@@ -210,6 +249,7 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
         dto.setLastInboundTime(inv.getLastInboundTime());
         dto.setLastOutboundTime(inv.getLastOutboundTime());
         dto.setWarehouseLocation(inv.getWarehouseLocation());
+        dto.setVersion(inv.getVersion());
         dto.setDeleted(inv.getDeleted());
         dto.setCreateTime(inv.getCreateTime());
         dto.setUpdateTime(inv.getUpdateTime());
@@ -241,5 +281,10 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
         }
 
         return dto;
+    }
+
+    private void evictInventoryCache(Long partId) {
+        Inventory inventory = baseMapper.selectOne(new LambdaQueryWrapper<Inventory>().eq(Inventory::getPartId, partId));
+        if (inventory != null) hotData.evict("inventory", inventory.getId());
     }
 }

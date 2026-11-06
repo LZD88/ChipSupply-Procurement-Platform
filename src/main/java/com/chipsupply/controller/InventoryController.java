@@ -8,6 +8,7 @@ import com.chipsupply.dto.InventoryWithPart;
 import com.chipsupply.entity.Inventory;
 import com.chipsupply.service.InventoryService;
 import com.chipsupply.audit.Auditable;
+import com.chipsupply.infrastructure.RedisHotDataService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -31,6 +32,7 @@ import java.util.Map;
 public class InventoryController {
 
     private final InventoryService inventoryService;
+    private final RedisHotDataService hotData;
 
     /**
      * 获取单个库存记录
@@ -38,7 +40,8 @@ public class InventoryController {
     @Operation(summary = "获取库存记录")
     @GetMapping("/get/{id}")
     public Result<InventoryWithPart> getById(@Parameter(description = "库存ID") @PathVariable Long id) {
-        InventoryWithPart inventory = inventoryService.getInventoryWithPart(id);
+        InventoryWithPart inventory = hotData.getOrLoad("inventory", id, InventoryWithPart.class,
+                () -> inventoryService.getInventoryWithPart(id));
         if (inventory == null) {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }
@@ -122,6 +125,7 @@ public class InventoryController {
         if (!success) {
             return Result.error();
         }
+        hotData.evict("inventory", id);
         return Result.success();
     }
 

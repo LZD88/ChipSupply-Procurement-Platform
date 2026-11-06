@@ -16,11 +16,12 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
     /** 单条 SQL 完成首次建账或累加入库，唯一键竞争也不会丢失增量。 */
     @Insert("""
             INSERT INTO inventory(part_id, current_quantity, safety_stock, last_inbound_time,
-                                  warehouse_location, deleted, create_time, update_time)
+                                  warehouse_location, version, deleted, create_time, update_time)
             VALUES(#{partId}, #{quantity}, #{safetyStock}, NOW(),
-                   COALESCE(NULLIF(#{warehouseLocation}, ''), 'ESD-A / 待分配库位'), 0, NOW(), NOW())
+                   COALESCE(NULLIF(#{warehouseLocation}, ''), 'ESD-A / 待分配库位'), 0, 0, NOW(), NOW())
             ON DUPLICATE KEY UPDATE
                 current_quantity = current_quantity + VALUES(current_quantity),
+                version = version + 1,
                 last_inbound_time = NOW(),
                 warehouse_location = CASE
                     WHEN #{warehouseLocation} IS NULL OR #{warehouseLocation} = '' THEN warehouse_location
@@ -37,6 +38,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
     @Update("""
             UPDATE inventory
                SET current_quantity = current_quantity - #{quantity},
+                   version = version + 1,
                    last_outbound_time = NOW(),
                    update_time = NOW()
              WHERE part_id = #{partId}

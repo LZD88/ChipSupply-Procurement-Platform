@@ -32,6 +32,14 @@ public class DatabaseInitializer implements ApplicationRunner {
         ResourceDatabasePopulator schema = new ResourceDatabasePopulator(new ClassPathResource("db/schema.sql"));
         schema.setSqlScriptEncoding("UTF-8");
         schema.execute(dataSource);
+        // CREATE TABLE IF NOT EXISTS 不会给旧表补列，因此执行轻量、幂等的兼容迁移。
+        Integer versionColumns = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=DATABASE() AND table_name='inventory' AND column_name='version'
+                """, Integer.class);
+        if (versionColumns != null && versionColumns == 0) {
+            jdbc.execute("ALTER TABLE inventory ADD COLUMN version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号' AFTER warehouse_location");
+        }
         if (!seedData) return;
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             if (jdbc.queryForObject("SELECT COUNT(*) FROM chip_dataset WHERE version='chip-supply-v3'", Integer.class) > 0) return;

@@ -21,6 +21,7 @@ public class InventoryWithPart {
     private LocalDateTime lastOutboundTime;
 
     private String warehouseLocation;
+    private Integer version;
     private Integer deleted;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS")
@@ -89,6 +90,10 @@ public class InventoryWithPart {
     public void setWarehouseLocation(String warehouseLocation) {
         this.warehouseLocation = warehouseLocation;
     }
+
+    public Integer getVersion() { return version; }
+
+    public void setVersion(Integer version) { this.version = version; }
 
     public Integer getDeleted() {
         return deleted;

@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS `inventory` (
   `last_inbound_time` datetime DEFAULT NULL COMMENT '最近入库时间',
   `last_outbound_time` datetime DEFAULT NULL COMMENT '最近出库时间',
   `warehouse_location` varchar(100) DEFAULT 'ESD-A / 待分配库位' COMMENT '仓库位置',
+  `version` int NOT NULL DEFAULT '0' COMMENT '乐观锁版本号',
   `deleted` tinyint DEFAULT '0' COMMENT '删除标志(0-未删除, 1-已删除)',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -203,6 +204,173 @@ CREATE TABLE IF NOT EXISTS `logistics` (
   KEY `idx_ship_time` (`ship_time`),
   CONSTRAINT `fk_logistics_order` FOREIGN KEY (`order_id`) REFERENCES `purchase_order` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='物流信息表';
+
+-- 10. 收货单：三单匹配中的实收依据
+CREATE TABLE IF NOT EXISTS `goods_receipt` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '收货单ID',
+  `receipt_number` varchar(50) NOT NULL COMMENT '收货单编号',
+  `order_id` bigint NOT NULL COMMENT '采购订单ID',
+  `received_quantity` int NOT NULL COMMENT '实收数量',
+  `received_amount` decimal(12,2) NOT NULL COMMENT '实收金额',
+  `received_at` datetime NOT NULL COMMENT '收货时间',
+  `warehouse_location` varchar(100) DEFAULT NULL COMMENT '收货库位',
+  `receiver` varchar(100) DEFAULT NULL COMMENT '收货人',
+  `status` varchar(20) NOT NULL DEFAULT 'CONFIRMED' COMMENT 'DRAFT/CONFIRMED',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_receipt_number` (`receipt_number`),
+  UNIQUE KEY `uk_receipt_order` (`order_id`),
+  CONSTRAINT `fk_receipt_order` FOREIGN KEY (`order_id`) REFERENCES `purchase_order` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='采购收货单';
+
+-- 11. 供应商发票：三单匹配中的应付依据
+CREATE TABLE IF NOT EXISTS `supplier_invoice` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '发票ID',
+  `invoice_number` varchar(50) NOT NULL COMMENT '发票号码',
+  `order_id` bigint NOT NULL COMMENT '采购订单ID',
+  `supplier_id` bigint DEFAULT NULL COMMENT '供应商ID',
+  `invoice_quantity` int NOT NULL COMMENT '开票数量',
+  `invoice_amount` decimal(12,2) NOT NULL COMMENT '含税发票金额',
+  `invoice_date` date NOT NULL COMMENT '开票日期',
+  `tax_rate` decimal(5,2) NOT NULL DEFAULT 13.00 COMMENT '税率百分比',
+  `status` varchar(20) NOT NULL DEFAULT 'RECEIVED' COMMENT 'RECEIVED/VERIFIED/REJECTED',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_invoice_number` (`invoice_number`),
+  UNIQUE KEY `uk_invoice_order` (`order_id`),
+  KEY `idx_invoice_supplier` (`supplier_id`),
+  CONSTRAINT `fk_invoice_order` FOREIGN KEY (`order_id`) REFERENCES `purchase_order` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_invoice_supplier` FOREIGN KEY (`supplier_id`) REFERENCES `supplier` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='供应商发票';
+
+-- 12. 业务事件流：同一 trace_id 串联请求、领域事件和资源变化
+CREATE TABLE IF NOT EXISTS `business_event` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '事件ID',
+  `event_id` varchar(64) NOT NULL COMMENT '全局事件ID',
+  `trace_id` varchar(64) NOT NULL COMMENT '端到端追踪ID',
+  `event_type` varchar(80) NOT NULL COMMENT '事件类型',
+  `aggregate_type` varchar(50) NOT NULL COMMENT '聚合类型',
+  `aggregate_id` varchar(100) NOT NULL COMMENT '聚合ID',
+  `order_id` bigint DEFAULT NULL COMMENT '关联采购订单',
+  `actor` varchar(100) DEFAULT NULL COMMENT '事件发起者',
+  `source` varchar(100) NOT NULL COMMENT '事件来源',
+  `status` varchar(20) NOT NULL DEFAULT 'COMPLETED' COMMENT 'PENDING/COMPLETED/FAILED',
+  `summary` varchar(500) NOT NULL COMMENT '业务摘要',
+  `payload_json` text COMMENT '脱敏事件负载',
+  `occurred_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发生时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_business_event_id` (`event_id`),
+  KEY `idx_event_trace` (`trace_id`, `occurred_at`),
+  KEY `idx_event_order` (`order_id`, `occurred_at`),
+  KEY `idx_event_type` (`event_type`),
+  CONSTRAINT `fk_event_order` FOREIGN KEY (`order_id`) REFERENCES `purchase_order` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='领域业务事件流';
+
+-- 13. API 幂等记录：同一业务意图只能生成一个资源
+CREATE TABLE IF NOT EXISTS `api_idempotency` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `idempotency_key` varchar(128) NOT NULL,
+  `request_hash` varchar(64) NOT NULL,
+  `resource_type` varchar(50) NOT NULL,
+  `resource_id` bigint DEFAULT NULL,
+  `response_json` longtext,
+  `status` varchar(20) NOT NULL DEFAULT 'PROCESSING',
+  `expires_at` datetime NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_idempotency_key` (`idempotency_key`),
+  KEY `idx_idempotency_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='接口幂等记录';
+
+-- 14. 事务消息表：和业务写入共享 MySQL 事务，RabbitMQ 暂停时消息仍不会丢
+CREATE TABLE IF NOT EXISTS `outbox_event` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `event_id` varchar(64) NOT NULL,
+  `aggregate_type` varchar(50) NOT NULL,
+  `aggregate_id` varchar(100) NOT NULL,
+  `event_type` varchar(80) NOT NULL,
+  `trace_id` varchar(64) NOT NULL,
+  `payload_json` longtext,
+  `status` varchar(20) NOT NULL DEFAULT 'PENDING',
+  `retry_count` int NOT NULL DEFAULT 0,
+  `next_attempt_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_error` varchar(500) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `published_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_outbox_event_id` (`event_id`),
+  KEY `idx_outbox_pending` (`status`,`next_attempt_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='事务消息发件箱';
+
+CREATE TABLE IF NOT EXISTS `event_consumption` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `consumer_name` varchar(100) NOT NULL,
+  `event_id` varchar(64) NOT NULL,
+  `consumed_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_event_consumer` (`consumer_name`,`event_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='消息消费去重日志';
+
+-- 为演示环境补齐脱敏收货与发票数据；幂等执行，不影响用户新增数据。
+INSERT IGNORE INTO `goods_receipt`
+(`receipt_number`,`order_id`,`received_quantity`,`received_amount`,`received_at`,`warehouse_location`,`receiver`,`status`,`remark`)
+SELECT CONCAT('GR-', LPAD(o.id, 6, '0')), o.id,
+       SUM(od.quantity) - IF(MOD(o.id, 11)=0, GREATEST(1,FLOOR(SUM(od.quantity)*0.03)), 0),
+       ROUND(o.total_amount - IF(MOD(o.id,11)=0,o.total_amount*0.03,0),2),
+       COALESCE(CONCAT(o.actual_delivery_date,' 10:00:00'), DATE_ADD(o.order_time, INTERVAL 7 DAY)),
+       'ESD-A / 验收区', '仓储专员', 'CONFIRMED',
+       IF(MOD(o.id,11)=0,'到货短装，等待供应商补发','数量与外观验收完成')
+FROM purchase_order o JOIN order_detail od ON od.order_id=o.id
+WHERE o.status=4 AND o.deleted=0 AND od.deleted=0
+GROUP BY o.id;
+
+INSERT IGNORE INTO `supplier_invoice`
+(`invoice_number`,`order_id`,`supplier_id`,`invoice_quantity`,`invoice_amount`,`invoice_date`,`tax_rate`,`status`,`remark`)
+SELECT CONCAT('INV-', LPAD(o.id, 8, '0')), o.id, MIN(p.supplier_id), SUM(od.quantity),
+       ROUND(o.total_amount + IF(MOD(o.id,13)=0,88.00,0),2),
+       COALESCE(o.actual_delivery_date, DATE(o.order_time)), 13.00, 'RECEIVED',
+       IF(MOD(o.id,13)=0,'发票金额包含额外费用，待采购复核','电子专票已接收')
+FROM purchase_order o JOIN order_detail od ON od.order_id=o.id JOIN part p ON p.id=od.part_id
+WHERE o.status=4 AND o.deleted=0 AND od.deleted=0
+GROUP BY o.id;
+
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-CREATE-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'PURCHASE_ORDER_CREATED',
+       'PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'procurement_agent','procurement-service','COMPLETED',
+       CONCAT('采购订单 ',o.order_number,' 已创建'),'{}',o.order_time
+FROM purchase_order o WHERE o.deleted=0;
+
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-RECEIPT-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'GOODS_RECEIPT_CONFIRMED',
+       'PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_3','warehouse-service','COMPLETED',
+       CONCAT('订单 ',o.order_number,' 完成到货验收'),'{}',COALESCE(gr.received_at,DATE_ADD(o.order_time,INTERVAL 7 DAY))
+FROM purchase_order o JOIN goods_receipt gr ON gr.order_id=o.id WHERE o.status=4 AND o.deleted=0;
+
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-INVOICE-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'SUPPLIER_INVOICE_RECEIVED',
+       'PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_1','finance-service','COMPLETED',
+       CONCAT('订单 ',o.order_number,' 已接收供应商发票'),'{}',CONCAT(si.invoice_date,' 14:00:00')
+FROM purchase_order o JOIN supplier_invoice si ON si.order_id=o.id WHERE o.status=4 AND o.deleted=0;
+
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-WORKFLOW-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'ORDER_STATUS_CHANGED',
+       'PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_2','workflow-service','COMPLETED',
+       CONCAT('订单 ',o.order_number,' 已完成审批并进入采购执行'),'{}',DATE_ADD(o.order_time,INTERVAL 1 DAY)
+FROM purchase_order o WHERE o.status=4 AND o.deleted=0;
+
+INSERT IGNORE INTO `business_event`
+(`event_id`,`trace_id`,`event_type`,`aggregate_type`,`aggregate_id`,`order_id`,`actor`,`source`,`status`,`summary`,`payload_json`,`occurred_at`)
+SELECT CONCAT('EVT-SEED-INVENTORY-',o.id),CONCAT('TRACE-PO-',LPAD(o.id,6,'0')),'INVENTORY_INBOUND',
+       'PURCHASE_ORDER',CAST(o.id AS CHAR),o.id,'ops_user_3','inventory-service','COMPLETED',
+       CONCAT('订单 ',o.order_number,' 对应物料已更新可用库存'),'{}',DATE_ADD(gr.received_at,INTERVAL 5 MINUTE)
+FROM purchase_order o JOIN goods_receipt gr ON gr.order_id=o.id WHERE o.status=4 AND o.deleted=0;
 
 -- ==================== 视图定义 ====================
 

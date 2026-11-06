@@ -5,6 +5,7 @@
 ![Java](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.1-6DB33F?logo=springboot&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
+![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.13-FF6600?logo=rabbitmq&logoColor=white)
 ![MyBatis Plus](https://img.shields.io/badge/MyBatis--Plus-3.5-EF2D5E)
 
 ## 项目定位
@@ -19,6 +20,13 @@
 - **供应网络管理**：维护供应商档案、信用等级和供货关系，支持多供应商比价与供应风险识别。
 - **库存与预警**：提供入库、出库、安全库存校验和库存预警接口，联动物料补货决策。
 - **采购订单闭环**：支持订单创建、明细查询、状态流转、金额重算和业务规则校验。
+- **缺货预测与智能补货**：结合近 180 天需求节奏、安全库存、MOQ 和供应交期，输出可解释的缺货风险、补货数量与资金建议，并通过人工审批后再下单。
+- **供应商风险雷达**：以信用、准时履约、平均交期、合作状态和供应集中度进行五维动态评分，支持备选供应商与双源保障决策。
+- **订单异常预警中心**：主动识别审批停滞、发运信息缺失、交付逾期和物流异常，提供面向业务人员的处理建议与订单钻取入口。
+- **三单匹配与采购对账**：对采购订单、仓储收货单和供应商发票进行数量与金额核验，自动区分匹配通过、差异冻结和待补单据，并支持在线补录后实时重算。
+- **可靠事件驱动与链路追踪**：以 MySQL Transactional Outbox、RabbitMQ Publisher Confirm、持久化 Topic Queue、幂等消费者与 DLQ 保证事件可恢复投递，并用统一 Trace ID 串联采购、流程、仓储、库存与财务模块。
+- **Agent 最小权限接入**：服务账号使用独立 RBAC 角色，只能读取业务数据并创建/修改待审核订单；库存写入、状态流转和审计日志均不可访问。
+- **字段级生产防护**：Agent 请求采用字段白名单，订单状态、金额、创建人、实际到货日期和数据库维护字段由服务端控制，防止通过请求体越权。
 - **版本化业务数据**：首次启动自动建库建表并写入可追踪的数据版本，保证环境一致性和可重复部署。
 - **可观测 API**：记录请求方法、路径、HTTP 状态和耗时，并支持按环境控制 SQL 与参数日志。
 
@@ -33,6 +41,9 @@ flowchart LR
     S --> D[MyBatis-Plus Mapper]
     D --> DB[(MySQL chip_supply_db)]
     I[Database Initializer] --> DB
+    S --> O[(Transactional Outbox)]
+    O --> R[RabbitMQ Topic Exchange]
+    R --> Q[持久化业务队列 / DLQ]
 ```
 
 ## 技术栈
@@ -91,6 +102,8 @@ java -jar target/ChipSupplyProcurementPlatform-1.0.0.jar
 | 采购订单 | `/api/orders` | 创建、修改、明细、统计、状态流转 |
 | 物流 | `/api/logistics` | 物流记录查询与维护 |
 | 统计 | `/api/statistics` | 采购与库存指标 |
+| 决策中心 | `/api/intelligence` | 智能补货、供应商风险雷达、订单异常预警 |
+| 采购控制塔 | `/api/control-tower` | 三单匹配、收货/发票补录、事件链路追踪 |
 
 ## 预置业务数据
 
@@ -124,6 +137,10 @@ src/test/                          自动化测试
 ## 与多智能体项目协作
 
 `ChipChain-Procurement-Agent` 通过 MCP 将 Agent 工具映射到本项目的 REST API。两者采用独立数据库：本项目的 `chip_supply_db` 保存供应链业务数据，Agent 项目的数据库保存账号、会话、检查点和沙箱绑定，避免业务状态与推理状态耦合。
+
+订单写入采用纵深防御：Agent 侧先进行确定性比价并等待人工批准，本平台再按认证身份执行接口级
+RBAC 和字段级白名单检查。即使绕过对话提示，Agent 仍不能推进订单状态、修改库存、读取审计日志、
+伪造创建人或把新订单直接写成已审核/采购中状态；所有新订单只能从“待审核”开始。
 
 ## 验证
 

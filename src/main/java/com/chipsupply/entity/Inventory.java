@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
@@ -65,6 +66,11 @@ public class Inventory extends BaseEntity {
      */
     @TableField("warehouse_location")
     private String warehouseLocation;
+
+    /** 通用编辑走乐观锁；原子入出库同时递增该版本。 */
+    @Version
+    @TableField("version")
+    private Integer version;
 
     public Inventory() {
     }
@@ -178,6 +184,10 @@ public class Inventory extends BaseEntity {
     public void setWarehouseLocation(String warehouseLocation) {
         this.warehouseLocation = warehouseLocation;
     }
+
+    public Integer getVersion() { return version; }
+
+    public void setVersion(Integer version) { this.version = version; }
 
     @Override
     public boolean equals(Object o) {

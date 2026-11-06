@@ -60,6 +60,7 @@ public class MyBatisPlusConfig {
                 new com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor();
         interceptor.addInnerInterceptor(new com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor(
                 com.baomidou.mybatisplus.annotation.DbType.MYSQL));
+        interceptor.addInnerInterceptor(new com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor());
         sqlSessionFactory.setPlugins(interceptor);
         // 不需要设置Mapper文件的位置，因为我们使用的是注解方式
         return sqlSessionFactory;

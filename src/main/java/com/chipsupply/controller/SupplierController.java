@@ -7,6 +7,7 @@ import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.entity.Supplier;
 import com.chipsupply.service.SupplierService;
 import com.chipsupply.audit.Auditable;
+import com.chipsupply.infrastructure.RedisHotDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +30,7 @@ import java.util.List;
 public class SupplierController {
 
     private final SupplierService supplierService;
+    private final RedisHotDataService hotData;
 
     /**
      * 创建供应商
@@ -45,6 +47,7 @@ public class SupplierController {
         if (!success) {
             return Result.error(ResultCode.DATA_EXISTS);
         }
+        hotData.evict("supplier", supplier.getId());
         return Result.success(supplier);
     }
 
@@ -64,6 +67,7 @@ public class SupplierController {
         if (!success) {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }
+        hotData.evict("supplier", id);
         return Result.success(supplier);
     }
 
@@ -78,6 +82,7 @@ public class SupplierController {
         if (!success) {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }
+        hotData.evict("supplier", id);
         return Result.success();
     }
 
@@ -87,7 +92,7 @@ public class SupplierController {
     @Operation(summary = "获取单个供应商")
     @GetMapping("/get/{id}")
     public Result<Supplier> getById(@Parameter(description = "供应商ID") @PathVariable Long id) {
-        Supplier supplier = supplierService.getById(id);
+        Supplier supplier = hotData.getOrLoad("supplier", id, Supplier.class, () -> supplierService.getById(id));
         if (supplier == null) {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }

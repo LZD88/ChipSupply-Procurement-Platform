@@ -17,6 +17,9 @@ import com.chipsupply.service.PurchaseOrderService;
 import com.chipsupply.audit.Auditable;
 import com.chipsupply.common.enums.OrderStatusEnum;
 import com.chipsupply.security.AuthenticatedUser;
+import com.chipsupply.security.AgentOrderPolicy;
+import com.chipsupply.service.OrderIdempotencyService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,6 +51,8 @@ public class PurchaseOrderController {
     private final PurchaseOrderService purchaseOrderService;
     private final OrderDetailMapper orderDetailMapper;
     private final PartMapper partMapper;
+    private final AgentOrderPolicy agentOrderPolicy;
+    private final OrderIdempotencyService idempotencyService;
 
     /**
      * 创建采购订单
@@ -56,13 +61,14 @@ public class PurchaseOrderController {
     @PostMapping("/create")
     @Auditable(action = "ORDER_CREATE", resourceType = "PURCHASE_ORDER")
     public Result<PurchaseOrderWithDetails> create(@Valid @RequestBody PurchaseOrderWithDetails order,
+                                                   @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+                                                   HttpServletResponse response,
                                                    @AuthenticationPrincipal AuthenticatedUser user) {
+        agentOrderPolicy.enforceCreate(order, user);
         order.setCreatedBy(user.id());
-        boolean success = purchaseOrderService.createOrder(order);
-        if (!success) {
-            return Result.error(ResultCode.DATA_EXISTS);
-        }
-        return Result.success(order);
+        OrderIdempotencyService.Outcome outcome = idempotencyService.create(idempotencyKey, order);
+        response.setHeader("Idempotency-Replayed", Boolean.toString(outcome.replayed()));
+        return Result.success(outcome.order());
     }
 
     /**
@@ -73,7 +79,9 @@ public class PurchaseOrderController {
     @Auditable(action = "ORDER_UPDATE", resourceType = "PURCHASE_ORDER")
     public Result<PurchaseOrderWithDetails> update(
             @Parameter(description = "订单ID") @PathVariable Long id,
-            @RequestBody PurchaseOrderWithDetails order) {
+            @RequestBody PurchaseOrderWithDetails order,
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        agentOrderPolicy.enforceUpdate(order, user);
         order.setId(id);
         boolean success = purchaseOrderService.updateById(order);
         if (!success) {

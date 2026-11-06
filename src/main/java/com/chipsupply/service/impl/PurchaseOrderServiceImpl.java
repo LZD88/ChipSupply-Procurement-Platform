@@ -18,6 +18,8 @@ import com.chipsupply.mapper.PurchaseOrderMapper;
 import com.chipsupply.mapper.SupplierMapper;
 import com.chipsupply.service.PurchaseOrderService;
 import com.chipsupply.service.InventoryService;
+import com.chipsupply.service.BusinessEventService;
+import com.chipsupply.service.ReconciliationService;
 import com.chipsupply.common.enums.OrderStatusEnum;
 import com.chipsupply.common.enums.ResultCode;
 import com.chipsupply.common.exception.BusinessException;
@@ -45,6 +47,8 @@ public class PurchaseOrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, P
     private final PartMapper partMapper;
     private final SupplierMapper supplierMapper;
     private final InventoryService inventoryService;
+    private final BusinessEventService eventService;
+    private final ReconciliationService reconciliationService;
 
     @Override
     public Page<PurchaseOrder> pageOrders(Page<PurchaseOrder> page, String orderNumber,
@@ -135,6 +139,9 @@ public class PurchaseOrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, P
         order.setUpdateTime(LocalDateTime.now());
         if (!save(order)) return false;
         saveDetails(order.getId(), details);
+        eventService.record("PURCHASE_ORDER_CREATED", "PURCHASE_ORDER", order.getId(), order.getId(),
+                "procurement-service", "采购订单已创建，等待审批",
+                Map.of("orderNumber", order.getOrderNumber(), "amount", order.getTotalAmount(), "itemCount", details.size()));
         return true;
     }
 
@@ -192,7 +199,11 @@ public class PurchaseOrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, P
                     throw new BusinessException("订单物料入库失败，事务已回滚");
                 }
             }
+            reconciliationService.ensureReceiptFromOrder(id);
         }
+        eventService.record("ORDER_STATUS_CHANGED", "PURCHASE_ORDER", id, id,
+                "workflow-service", "订单状态从“" + current.getDescription() + "”流转到“" + target.getDescription() + "”",
+                Map.of("from", current.getCode(), "to", target.getCode()));
         return true;
     }
 
