@@ -57,37 +57,9 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
             return false;
         }
 
-        // 查找库存记录
-        LambdaQueryWrapper<Inventory> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Inventory::getPartId, partId);
-        Inventory inventory = baseMapper.selectOne(wrapper);
-
-        if (inventory == null) {
-            // 创建新的库存记录
-            Inventory newInventory = new Inventory();
-            newInventory.setPartId(partId);
-            newInventory.setCurrentQuantity(quantity);
-            newInventory.setSafetyStock(part.getStockWarningValue() != null ? part.getStockWarningValue() : 100);
-            newInventory.setWarehouseLocation(StringUtils.hasText(warehouseLocation) ? warehouseLocation : "ESD-A / 待分配库位");
-            newInventory.setLastInboundTime(LocalDateTime.now());
-            // 手动设置 deleted、createTime、updateTime
-            newInventory.setDeleted(0);
-            newInventory.setCreateTime(LocalDateTime.now());
-            newInventory.setUpdateTime(LocalDateTime.now());
-            return save(newInventory);
-        } else {
-            // 更新现有库存
-            LambdaUpdateWrapper<Inventory> updateWrapper = new LambdaUpdateWrapper<>();
-            updateWrapper.set(Inventory::getCurrentQuantity, inventory.getCurrentQuantity() + quantity)
-                         .set(Inventory::getLastInboundTime, LocalDateTime.now())
-                         .eq(Inventory::getId, inventory.getId());
-
-            if (StringUtils.hasText(warehouseLocation)) {
-                updateWrapper.set(Inventory::getWarehouseLocation, warehouseLocation);
-            }
-
-            return update(updateWrapper);
-        }
+        int safetyStock = part.getStockWarningValue() != null ? part.getStockWarningValue() : 100;
+        return baseMapper.atomicInbound(partId, quantity, safetyStock,
+                StringUtils.hasText(warehouseLocation) ? warehouseLocation : null) > 0;
     }
 
     @Override
@@ -97,22 +69,7 @@ public class InventoryServiceImpl extends ServiceImpl<InventoryMapper, Inventory
             return false;
         }
 
-        // 查找库存记录
-        LambdaQueryWrapper<Inventory> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Inventory::getPartId, partId);
-        Inventory inventory = baseMapper.selectOne(wrapper);
-
-        if (inventory == null || inventory.getCurrentQuantity() < quantity) {
-            return false;
-        }
-
-        // 更新库存
-        LambdaUpdateWrapper<Inventory> updateWrapper = new LambdaUpdateWrapper<>();
-        updateWrapper.set(Inventory::getCurrentQuantity, inventory.getCurrentQuantity() - quantity)
-                     .set(Inventory::getLastOutboundTime, LocalDateTime.now())
-                     .eq(Inventory::getId, inventory.getId());
-
-        return update(updateWrapper);
+        return baseMapper.atomicOutbound(partId, quantity) == 1;
     }
 
     @Override

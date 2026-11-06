@@ -14,6 +14,10 @@ import com.chipsupply.entity.PurchaseOrderWithDetails;
 import com.chipsupply.mapper.OrderDetailMapper;
 import com.chipsupply.mapper.PartMapper;
 import com.chipsupply.service.PurchaseOrderService;
+import com.chipsupply.audit.Auditable;
+import com.chipsupply.common.enums.OrderStatusEnum;
+import com.chipsupply.security.AuthenticatedUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -50,7 +54,10 @@ public class PurchaseOrderController {
      */
     @Operation(summary = "创建采购订单")
     @PostMapping("/create")
-    public Result<PurchaseOrderWithDetails> create(@Valid @RequestBody PurchaseOrderWithDetails order) {
+    @Auditable(action = "ORDER_CREATE", resourceType = "PURCHASE_ORDER")
+    public Result<PurchaseOrderWithDetails> create(@Valid @RequestBody PurchaseOrderWithDetails order,
+                                                   @AuthenticationPrincipal AuthenticatedUser user) {
+        order.setCreatedBy(user.id());
         boolean success = purchaseOrderService.createOrder(order);
         if (!success) {
             return Result.error(ResultCode.DATA_EXISTS);
@@ -63,6 +70,7 @@ public class PurchaseOrderController {
      */
     @Operation(summary = "更新采购订单")
     @PutMapping("/update/{id}")
+    @Auditable(action = "ORDER_UPDATE", resourceType = "PURCHASE_ORDER")
     public Result<PurchaseOrderWithDetails> update(
             @Parameter(description = "订单ID") @PathVariable Long id,
             @RequestBody PurchaseOrderWithDetails order) {
@@ -79,6 +87,7 @@ public class PurchaseOrderController {
      */
     @Operation(summary = "删除采购订单")
     @DeleteMapping("/delete/{id}")
+    @Auditable(action = "ORDER_DELETE", resourceType = "PURCHASE_ORDER")
     public Result<Void> delete(@Parameter(description = "订单ID") @PathVariable Long id) {
         boolean success = purchaseOrderService.removeById(id);
         if (!success) {
@@ -251,6 +260,7 @@ public class PurchaseOrderController {
      */
     @Operation(summary = "更新订单状态")
     @PatchMapping("/update-status/{id}")
+    @Auditable(action = "ORDER_STATUS_TRANSITION", resourceType = "PURCHASE_ORDER")
     public Result<Void> updateStatus(
             @Parameter(description = "订单ID") @PathVariable Long id,
             @Parameter(description = "新状态") @RequestParam Integer status) {
@@ -259,6 +269,16 @@ public class PurchaseOrderController {
             return Result.error(ResultCode.DATA_NOT_EXISTS);
         }
         return Result.success();
+    }
+
+    @Operation(summary = "获取订单允许的下一状态")
+    @GetMapping("/{id}/allowed-transitions")
+    public Result<List<Map<String, Object>>> getAllowedTransitions(@PathVariable Long id) {
+        if (purchaseOrderService.getById(id) == null) return Result.error(ResultCode.DATA_NOT_EXISTS);
+        List<Map<String, Object>> transitions = purchaseOrderService.getAllowedTransitions(id).stream()
+                .map(status -> Map.<String, Object>of("code", status.getCode(), "description", status.getDescription()))
+                .toList();
+        return Result.success(transitions);
     }
 
     /**

@@ -17,6 +17,10 @@ import com.chipsupply.mapper.PartMapper;
 import com.chipsupply.mapper.PurchaseOrderMapper;
 import com.chipsupply.mapper.SupplierMapper;
 import com.chipsupply.service.PurchaseOrderService;
+import com.chipsupply.service.InventoryService;
+import com.chipsupply.common.enums.OrderStatusEnum;
+import com.chipsupply.common.enums.ResultCode;
+import com.chipsupply.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +44,7 @@ public class PurchaseOrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, P
     private final OrderDetailMapper orderDetailMapper;
     private final PartMapper partMapper;
     private final SupplierMapper supplierMapper;
+    private final InventoryService inventoryService;
 
     @Override
     public Page<PurchaseOrder> pageOrders(Page<PurchaseOrder> page, String orderNumber,
@@ -117,6 +122,9 @@ public class PurchaseOrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, P
     public boolean createOrder(PurchaseOrder order) {
         if (order == null || !StringUtils.hasText(order.getOrderNumber())) return false;
         checkStatus(order.getStatus());
+        if (order.getStatus() != null && !OrderStatusEnum.PENDING_REVIEW.getCode().equals(order.getStatus())) {
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR, "新订单只能从待审核状态开始");
+        }
         List<OrderDetailWithPart> details = checkedDetails(order, true);
         if (baseMapper.selectCount(new LambdaQueryWrapper<PurchaseOrder>().eq(PurchaseOrder::getOrderNumber, order.getOrderNumber())) > 0) return false;
         if (order.getOrderTime() == null) order.setOrderTime(LocalDateTime.now());
@@ -133,8 +141,16 @@ public class PurchaseOrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, P
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean updateById(PurchaseOrder order) {
-        if (order == null || order.getId() == null || getById(order.getId()) == null) return false;
+        if (order == null || order.getId() == null) return false;
+        PurchaseOrder existing = getById(order.getId());
+        if (existing == null) return false;
+        if (!OrderStatusEnum.PENDING_REVIEW.getCode().equals(existing.getStatus())) {
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR, "订单进入审核后已锁定，不允许修改业务内容");
+        }
         checkStatus(order.getStatus());
+        if (order.getStatus() != null && !order.getStatus().equals(existing.getStatus())) {
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR, "订单状态只能通过状态流转接口修改");
+        }
         List<OrderDetailWithPart> details = checkedDetails(order, false);
         if (order.getOrderNumber() != null && !StringUtils.hasText(order.getOrderNumber()))
             throw new com.chipsupply.common.exception.BusinessException("订单编号不能为空");
@@ -151,18 +167,41 @@ public class PurchaseOrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, P
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean updateOrderStatus(Long id, Integer status) {
         if (id == null || status == null) return false;
         checkStatus(status);
         PurchaseOrder existing = getById(id);
         if (existing == null) return false;
-        LambdaUpdateWrapper<PurchaseOrder> wrapper = new LambdaUpdateWrapper<>();
-        wrapper.set(PurchaseOrder::getStatus, status).set(PurchaseOrder::getUpdateTime, LocalDateTime.now())
-                .eq(PurchaseOrder::getId, id);
-        if (status == 4 && existing.getActualDeliveryDate() == null) {
-            wrapper.set(PurchaseOrder::getActualDeliveryDate, LocalDate.now());
+        OrderStatusEnum current = OrderStatusEnum.getByCode(existing.getStatus());
+        OrderStatusEnum target = OrderStatusEnum.getByCode(status);
+        if (current == null || !current.canTransitionTo(target)) {
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR,
+                    "不允许从“" + (current == null ? existing.getStatus() : current.getDescription())
+                            + "”流转到“" + (target == null ? status : target.getDescription()) + "”");
         }
-        return update(wrapper);
+        if (baseMapper.transitionStatus(id, existing.getStatus(), status) != 1) {
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR, "订单状态已被其他请求修改，请刷新后重试");
+        }
+        if (target == OrderStatusEnum.STORED) {
+            List<OrderDetail> details = orderDetailMapper.selectList(
+                    new LambdaQueryWrapper<OrderDetail>().eq(OrderDetail::getOrderId, id));
+            if (details.isEmpty()) throw new BusinessException("订单没有可入库明细");
+            for (OrderDetail detail : details) {
+                if (!inventoryService.inbound(detail.getPartId(), detail.getQuantity(), null)) {
+                    throw new BusinessException("订单物料入库失败，事务已回滚");
+                }
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public List<OrderStatusEnum> getAllowedTransitions(Long id) {
+        PurchaseOrder order = getById(id);
+        if (order == null) return List.of();
+        OrderStatusEnum current = OrderStatusEnum.getByCode(order.getStatus());
+        return current == null ? List.of() : current.allowedTransitions();
     }
 
     @Override

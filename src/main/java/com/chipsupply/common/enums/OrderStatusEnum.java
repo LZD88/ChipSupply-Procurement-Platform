@@ -1,5 +1,9 @@
 package com.chipsupply.common.enums;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * 订单状态枚举
  */
@@ -66,5 +70,25 @@ public enum OrderStatusEnum {
      */
     public static boolean isValid(Integer code) {
         return getByCode(code) != null;
+    }
+
+    /**
+     * 采购订单的唯一合法流转图：
+     * 待审核→已审核/已取消，已审核→采购中/已取消，采购中→已入库。
+     */
+    public boolean canTransitionTo(OrderStatusEnum target) {
+        if (target == null) return false;
+        return switch (this) {
+            case PENDING_REVIEW -> target == REVIEWED || target == CANCELLED;
+            case REVIEWED -> target == PURCHASING || target == CANCELLED;
+            case PURCHASING -> target == STORED;
+            case STORED, CANCELLED -> false;
+        };
+    }
+
+    public List<OrderStatusEnum> allowedTransitions() {
+        return Collections.unmodifiableList(Arrays.stream(values())
+                .filter(this::canTransitionTo)
+                .toList());
     }
 }

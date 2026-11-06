@@ -8,6 +8,7 @@ import com.chipsupply.entity.PurchaseOrder;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.chipsupply.common.enums.OrderStatusEnum;
 
 /**
  * 采购订单服务接口
@@ -43,6 +44,8 @@ public interface PurchaseOrderService extends IService<PurchaseOrder> {
      * @return 是否成功
      */
     boolean updateOrderStatus(Long id, Integer status);
+
+    List<OrderStatusEnum> getAllowedTransitions(Long id);
 
     /**
      * 获取订单统计信息
