@@ -62,13 +62,28 @@ public class PurchaseOrderController {
     @Auditable(action = "ORDER_CREATE", resourceType = "PURCHASE_ORDER")
     public Result<PurchaseOrderWithDetails> create(@Valid @RequestBody PurchaseOrderWithDetails order,
                                                    @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+                                                   @RequestHeader(name = "X-Request-Id", required = false) String auditReference,
                                                    HttpServletResponse response,
                                                    @AuthenticationPrincipal AuthenticatedUser user) {
         agentOrderPolicy.enforceCreate(order, user);
         order.setCreatedBy(user.id());
         OrderIdempotencyService.Outcome outcome = idempotencyService.create(idempotencyKey, order);
         response.setHeader("Idempotency-Replayed", Boolean.toString(outcome.replayed()));
+        if (auditReference != null && !auditReference.isBlank()) {
+            // AuditService stores the same request header in audit_log.request_id.
+            response.setHeader("X-ERP-Audit-Ref", auditReference);
+        }
         return Result.success(outcome.order());
+    }
+
+    @Operation(summary = "查询订单幂等结果（协调专用）")
+    @GetMapping("/idempotency/{key:.+}")
+    public Result<Map<String, Object>> idempotencyOutcome(@PathVariable String key) {
+        OrderIdempotencyService.Lookup lookup = idempotencyService.lookup(key);
+        Map<String, Object> data = new HashMap<>();
+        data.put("status", lookup.status());
+        if (lookup.order() != null) data.put("order", lookup.order());
+        return Result.success(data);
     }
 
     /**

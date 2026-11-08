@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -31,6 +32,7 @@ public class OrderIdempotencyService {
     private final PlatformTransactionManager transactionManager;
 
     public record Outcome(PurchaseOrderWithDetails order, boolean replayed) { }
+    public record Lookup(String status, PurchaseOrderWithDetails order) { }
 
     @Transactional(rollbackFor = Exception.class)
     public Outcome create(String key, PurchaseOrderWithDetails order) {
@@ -59,6 +61,31 @@ public class OrderIdempotencyService {
         }
         metrics.counter("chipsupply.idempotency.created").increment();
         return new Outcome(order, false);
+    }
+
+    /** Read-only reconciliation contract; never creates or releases an order reservation. */
+    public Lookup lookup(String key) {
+        if (key == null || key.isBlank() || key.length() > 128
+                || !key.matches("[A-Za-z0-9._:-]{8,128}")) {
+            throw new BusinessException("Idempotency-Key 格式无效（需为 8-128 位安全字符）");
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT response_json,status FROM api_idempotency WHERE idempotency_key=?
+                """, key.trim());
+        if (rows.isEmpty()) return new Lookup("ABSENT", null);
+        Map<String, Object> record = rows.get(0);
+        String status = String.valueOf(record.get("status"));
+        Object responseJson = record.get("response_json");
+        if (!"COMPLETED".equals(status) || responseJson == null) {
+            return new Lookup("PROCESSING", null);
+        }
+        try {
+            PurchaseOrderWithDetails saved = objectMapper.readValue(
+                    String.valueOf(responseJson), PurchaseOrderWithDetails.class);
+            return new Lookup("COMPLETED", saved);
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException("幂等响应读取失败", exception);
+        }
     }
 
     private boolean reserve(String key, String hash) {

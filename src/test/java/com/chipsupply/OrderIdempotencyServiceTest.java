@@ -15,6 +15,7 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.util.Map;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,6 +59,27 @@ class OrderIdempotencyServiceTest {
 
         assertThrows(BusinessException.class,
                 () -> service.create("agent-order:12345678", order("PO-002")));
+        verify(orders, never()).createOrder(any());
+    }
+
+    @Test
+    void lookupDistinguishesAbsentAndCompletedWithoutCreatingOrder() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PurchaseOrderService orders = mock(PurchaseOrderService.class);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        OrderIdempotencyService service = new OrderIdempotencyService(
+                jdbc, orders, mapper, new SimpleMeterRegistry(), txManager());
+
+        when(jdbc.queryForList(anyString(), eq("agent-order:absent1"))).thenReturn(List.of());
+        assertEquals("ABSENT", service.lookup("agent-order:absent1").status());
+
+        PurchaseOrderWithDetails stored = order("PO-LOOKUP");
+        stored.setId(88L);
+        when(jdbc.queryForList(anyString(), eq("agent-order:complete1"))).thenReturn(List.of(Map.of(
+                "response_json", json(mapper, stored), "status", "COMPLETED")));
+        OrderIdempotencyService.Lookup completed = service.lookup("agent-order:complete1");
+        assertEquals("COMPLETED", completed.status());
+        assertEquals(88L, completed.order().getId());
         verify(orders, never()).createOrder(any());
     }
 
